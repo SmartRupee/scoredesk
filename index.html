@@ -135,7 +135,16 @@
   }
   button.primary:hover{background:#A17A34;}
   button.primary:disabled{background:#ccc;cursor:not-allowed;}
-  button.download{display:none;margin-top:18px;}
+  button.download{display:none;margin-top:18px;background:var(--green);}
+  button.download:hover{background:#245F3F;}
+
+  .sample-box{
+    margin-top:16px; padding:14px 16px; background:#F6F4EE; border:1px solid var(--line); border-radius:2px;
+  }
+  .sample-box-label{
+    font-family:'Courier New',monospace; font-size:11px; letter-spacing:0.5px; text-transform:uppercase;
+    color:#7A8899; margin-bottom:8px;
+  }
 
   /* ---------- Support tab ---------- */
   .support-wrap{ text-align:center; padding:10px 0 6px; }
@@ -262,9 +271,10 @@
       </div>
 
       <div class="privacy"><b>Privacy note:</b> This page reads the PDF entirely inside your own browser using PDF.js. Your report is never uploaded to any server — closing this tab discards everything.</div>
-      <div style="margin-top:14px;">
-        <button class="primary" type="button" id="sampleDownloadBtn" style="background:transparent;color:var(--navy-2);border:1px solid var(--line);">Download Sample Template (.xlsx)</button>
-        <div class="form-note">Want to see the output format first? This downloads a sample sheet with placeholder data — no PDF needed.</div>
+      <div class="sample-box">
+        <div class="sample-box-label">Just want to see the format?</div>
+        <button class="primary" type="button" id="sampleDownloadBtn" style="background:transparent;color:var(--navy-2);border:1px solid var(--line);">Preview Format — Sample Data (.xlsx)</button>
+        <div class="form-note">⚠️ This always contains the same made-up placeholder numbers, on purpose — it's just to show the layout, not your data. Upload your own PDF above and use the green <b>Download Excel</b> button after Step 2 to get your real report.</div>
       </div>
     </div>
 
@@ -564,7 +574,13 @@ dropZone.addEventListener('drop', e => {
   dropZone.classList.remove('hover');
   if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
 });
-fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+  // Reset so picking a file with the same name/path again still fires 'change' —
+  // otherwise browsers treat an unchanged selection as a no-op and silently
+  // keep showing the previous file's results.
+  e.target.value = '';
+});
 
 function setStatus(msg, state){
   statusText.textContent = msg;
@@ -610,32 +626,43 @@ function loadPdfWithPassword(buf){
   });
 }
 
+let currentRequestId = 0;
+
 async function handleFile(file){
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')){
     setStatus('Please choose a .pdf file.', 'err');
     return;
   }
+  // Tag this run. If a newer file is selected before this one finishes,
+  // its result gets discarded below instead of overwriting the newer one.
+  const requestId = ++currentRequestId;
+
   setStatus('Reading PDF…');
   resultsCard.style.display = 'none';
   readyBanner.style.display = 'none';
+  loanTableBody.innerHTML = '';
+  statGrid.innerHTML = '';
   hidePasswordPrompt();
   try{
     const buf = await file.arrayBuffer();
     const pdf = await loadPdfWithPassword(buf);
     let fullText = '';
     for (let i = 1; i <= pdf.numPages; i++){
+      if (requestId !== currentRequestId) return; // superseded by a newer upload
       setStatus(`Extracting text — page ${i} of ${pdf.numPages}…`);
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
       const strings = content.items.map(it => it.str);
       fullText += strings.join(' ') + '\n';
     }
+    if (requestId !== currentRequestId) return; // superseded by a newer upload
     setStatus('Parsing loan accounts…');
     parseReport(fullText);
     renderResults();
     setStatus(`Done — found ${parsedAccounts.length} accounts and ${parsedEnquiries.length} enquiries.`, 'ok');
     readyBanner.style.display = 'block';
   }catch(err){
+    if (requestId !== currentRequestId) return; // superseded by a newer upload
     console.error(err);
     setStatus('Could not read this PDF. It may be a scanned image rather than a text PDF.', 'err');
   }
@@ -813,7 +840,7 @@ document.getElementById('sampleDownloadBtn').addEventListener('click', () => {
   ws3['!cols'] = [{wch:4},{wch:12},{wch:40},{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws3, 'Enquiries');
 
-  XLSX.writeFile(wb, 'ScoreDesk_Sample_Template.xlsx');
+  XLSX.writeFile(wb, 'SmartRupee_ScoreDesk_Sample_Template.xlsx');
 });
 
 downloadBtn.addEventListener('click', () => {
@@ -846,7 +873,8 @@ downloadBtn.addEventListener('click', () => {
   ws3['!cols'] = [{wch:4},{wch:12},{wch:40},{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws3, 'Enquiries');
 
-  const fname = 'CIBIL_Loan_Tracker' + (consumerName ? '_' + consumerName.split(' ')[0] : '') + '.xlsx';
+  const stamp = new Date().toISOString().replace(/[-:]/g,'').replace('T','_').slice(0,15);
+  const fname = 'SmartRupee_ScoreDesk' + (consumerName ? '_' + consumerName.split(' ')[0] : '') + '_' + stamp + '.xlsx';
   XLSX.writeFile(wb, fname);
 });
 </script>
