@@ -86,6 +86,32 @@
   .dot{width:8px;height:8px;border-radius:50%;background:var(--steel);flex:none;}
   .dot.ok{background:var(--green);} .dot.err{background:var(--red);}
   .privacy{font-family:'Courier New',monospace;font-size:12px;color:#7A8899;margin-top:14px;line-height:1.6;}
+
+  /* ---------- Password prompt ---------- */
+  .password-box{
+    margin-top:16px; padding:16px; background:#FFF8EC; border:1px solid #EAD9AE; border-radius:2px;
+  }
+  .password-box label{
+    display:block; font-family:'Courier New',monospace; font-size:12px; color:var(--navy-2);
+    margin-bottom:10px; line-height:1.5;
+  }
+  .password-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .password-row input{
+    flex:1; min-width:160px; border:1px solid var(--line); border-radius:2px; padding:10px 12px;
+    font-family:Georgia, serif; font-size:14px; background:#fff; color:var(--ink);
+  }
+  .password-row input:focus{ outline:none; border-color:var(--gold); }
+  .password-row button{ padding:10px 20px; }
+  .password-error{
+    font-family:'Courier New',monospace; font-size:12px; color:var(--red); margin-top:10px;
+  }
+
+  /* ---------- Ready-to-download banner ---------- */
+  .ready-banner{
+    background:#E4F1E9; border:1px solid #BFE3CB; color:var(--green);
+    font-family:'Courier New',monospace; font-size:13px; font-weight:700;
+    padding:12px 14px; border-radius:2px; margin-bottom:14px;
+  }
   .privacy b{color:var(--navy-2);}
   table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;}
   th{text-align:left;background:var(--navy);color:#fff;padding:8px 10px;font-family:'Courier New',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;}
@@ -224,6 +250,17 @@
       </div>
       <input type="file" id="fileInput" accept="application/pdf">
       <div class="status-line" id="statusLine"><span class="dot" id="statusDot"></span><span id="statusText">Waiting for a file…</span></div>
+
+      <div class="password-box" id="passwordBox" style="display:none;">
+        <label for="pdfPasswordInput">This PDF is password protected — enter its password to unlock it</label>
+        <div class="password-row">
+          <input type="password" id="pdfPasswordInput" placeholder="PDF password" autocomplete="off">
+          <button class="primary" type="button" id="pdfPasswordSubmit">Unlock &amp; Analyse</button>
+        </div>
+        <div class="password-error" id="passwordError" style="display:none;">Incorrect password — please try again.</div>
+        <div class="form-note">Your password is used only inside your browser to open the PDF locally — it's never sent anywhere or stored.</div>
+      </div>
+
       <div class="privacy"><b>Privacy note:</b> This page reads the PDF entirely inside your own browser using PDF.js. Your report is never uploaded to any server — closing this tab discards everything.</div>
       <div style="margin-top:14px;">
         <button class="primary" type="button" id="sampleDownloadBtn" style="background:transparent;color:var(--navy-2);border:1px solid var(--line);">Download Sample Template (.xlsx)</button>
@@ -241,6 +278,7 @@
           <tbody></tbody>
         </table>
       </div>
+      <div class="ready-banner" id="readyBanner" style="display:none;">✅ Your file is ready to download.</div>
       <button class="primary download" id="downloadBtn">Download Excel (.xlsx)</button>
     </div>
 
@@ -507,6 +545,11 @@ const statGrid = document.getElementById('statGrid');
 const loanTableBody = document.querySelector('#loanTable tbody');
 const downloadBtn = document.getElementById('downloadBtn');
 const emptyHint = document.getElementById('emptyHint');
+const passwordBox = document.getElementById('passwordBox');
+const pdfPasswordInput = document.getElementById('pdfPasswordInput');
+const pdfPasswordSubmit = document.getElementById('pdfPasswordSubmit');
+const passwordError = document.getElementById('passwordError');
+const readyBanner = document.getElementById('readyBanner');
 
 let parsedAccounts = [];
 let parsedEnquiries = [];
@@ -528,6 +571,45 @@ function setStatus(msg, state){
   statusDot.className = 'dot' + (state ? ' ' + state : '');
 }
 
+function hidePasswordPrompt(){
+  passwordBox.style.display = 'none';
+  passwordError.style.display = 'none';
+  pdfPasswordInput.value = '';
+}
+
+// Wraps pdfjsLib's getDocument so a password-protected PDF pauses here and
+// waits for the visitor to type a password in the on-page prompt, instead
+// of failing outright. Nothing about the password ever leaves the browser.
+function loadPdfWithPassword(buf){
+  return new Promise((resolve, reject) => {
+    const loadingTask = pdfjsLib.getDocument({ data: buf });
+
+    loadingTask.onPassword = (callback, reason) => {
+      // reason 1 = password needed, reason 2 = previously entered password was wrong
+      const wasWrong = reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD;
+      passwordBox.style.display = 'block';
+      passwordError.style.display = wasWrong ? 'block' : 'none';
+      setStatus(wasWrong ? 'That password didn\'t work — try again.' : 'This PDF is password protected.', wasWrong ? 'err' : '');
+      pdfPasswordInput.focus();
+
+      const onSubmit = () => {
+        const pw = pdfPasswordInput.value;
+        if (!pw) return;
+        pdfPasswordSubmit.removeEventListener('click', onSubmit);
+        pdfPasswordInput.removeEventListener('keydown', onKeydown);
+        setStatus('Checking password…');
+        callback(pw);
+      };
+      const onKeydown = (e) => { if (e.key === 'Enter') onSubmit(); };
+
+      pdfPasswordSubmit.addEventListener('click', onSubmit);
+      pdfPasswordInput.addEventListener('keydown', onKeydown);
+    };
+
+    loadingTask.promise.then(pdf => { hidePasswordPrompt(); resolve(pdf); }).catch(reject);
+  });
+}
+
 async function handleFile(file){
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')){
     setStatus('Please choose a .pdf file.', 'err');
@@ -535,9 +617,11 @@ async function handleFile(file){
   }
   setStatus('Reading PDF…');
   resultsCard.style.display = 'none';
+  readyBanner.style.display = 'none';
+  hidePasswordPrompt();
   try{
     const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const pdf = await loadPdfWithPassword(buf);
     let fullText = '';
     for (let i = 1; i <= pdf.numPages; i++){
       setStatus(`Extracting text — page ${i} of ${pdf.numPages}…`);
@@ -550,6 +634,7 @@ async function handleFile(file){
     parseReport(fullText);
     renderResults();
     setStatus(`Done — found ${parsedAccounts.length} accounts and ${parsedEnquiries.length} enquiries.`, 'ok');
+    readyBanner.style.display = 'block';
   }catch(err){
     console.error(err);
     setStatus('Could not read this PDF. It may be a scanned image rather than a text PDF.', 'err');
