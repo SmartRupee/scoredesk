@@ -6,20 +6,26 @@
 <title>ScoreDesk — CIBIL to Excel, Powered by SmartRupee</title>
 <style>
   :root{
-    --navy:#0F2A47;
-    --navy-2:#153A5F;
+    --navy:#0B2540;
+    --navy-2:#123A63;
+    --teal:#0E9384;
+    --teal-2:#0B7A6E;
     --steel:#5B7A99;
-    --paper:#F6F4EE;
-    --line:#D8D2C4;
+    --paper:#F4F7F8;
+    --line:#E2E8ED;
     --ink:#1B2430;
-    --gold:#B98A3E;
-    --green:#2E7D4F;
-    --red:#B84040;
+    --gold:#D89B3F;
+    --green:#1F9D63;
+    --red:#D14D4D;
+    --radius:14px;
+    --radius-sm:9px;
+    --shadow:0 4px 18px rgba(11,37,64,0.07);
+    --shadow-lg:0 12px 32px rgba(11,37,64,0.12);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
-    font-family:'Georgia','Times New Roman',serif;
+    font-family:'Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
     background:var(--paper);
     color:var(--ink);
     -webkit-user-select:none; -moz-user-select:none; -ms-user-select:none; user-select:none;
@@ -30,66 +36,85 @@
 
   /* ---------- Top bar ---------- */
   header.site{
-    background:var(--navy);
+    background:linear-gradient(120deg, var(--navy) 0%, var(--navy-2) 55%, var(--teal-2) 130%);
     color:#fff;
     padding:0;
-    border-bottom:4px solid var(--gold);
     position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 16px rgba(11,37,64,0.18);
   }
-  .wrap{max-width:960px;margin:0 auto;padding:0 20px;}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 20px;}
   .brand-row{
     display:flex; align-items:center; justify-content:space-between;
-    padding:18px 0 12px;
+    padding:22px 0 16px;
   }
-  .brand-row h1{margin:0;font-size:21px;letter-spacing:0.4px;}
-  .brand-row .sub{font-family:'Courier New',monospace;font-size:11px;color:#C9D6E3;margin-top:3px;}
+  .brand-row h1{margin:0;font-size:26px;letter-spacing:0.2px;font-weight:800;}
+  .brand-row .sub{font-family:'Courier New',monospace;font-size:11.5px;color:#BFE3DC;margin-top:5px;letter-spacing:0.3px;}
   nav.tabs{
-    display:flex; gap:2px; overflow-x:auto; border-top:1px solid rgba(255,255,255,0.12);
+    display:flex; gap:6px; overflow-x:auto; padding-bottom:12px;
   }
   nav.tabs button{
-    background:transparent; border:none; color:#C9D6E3;
-    font-family:'Courier New',monospace; font-size:12.5px; letter-spacing:0.5px;
-    text-transform:uppercase; padding:13px 18px; cursor:pointer;
-    border-bottom:3px solid transparent; white-space:nowrap;
-    transition:background 0.15s, color 0.15s, border-color 0.15s;
+    background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12); color:#DCEAE7;
+    font-size:13.5px; font-weight:600; letter-spacing:0.2px;
+    padding:10px 20px; cursor:pointer; border-radius:999px; white-space:nowrap;
+    transition:background 0.15s, color 0.15s, transform 0.15s;
   }
-  nav.tabs button:hover{background:rgba(255,255,255,0.06); color:#fff;}
-  nav.tabs button.active{color:#fff; border-bottom-color:var(--gold); background:rgba(255,255,255,0.04);}
+  nav.tabs button:hover{background:rgba(255,255,255,0.16); color:#fff;}
+  nav.tabs button.active{color:var(--navy); background:#fff; border-color:#fff; box-shadow:var(--shadow);}
 
-  main{padding:32px 20px 70px;}
+  main{padding:36px 20px 80px;}
   .panel{display:none;}
   .panel.active{display:block; animation:fadeIn 0.25s ease;}
   @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
 
   .card{
-    background:#fff; border:1px solid var(--line); border-radius:2px;
-    padding:24px; margin-bottom:20px; box-shadow:0 1px 3px rgba(15,42,71,0.06);
+    background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+    padding:28px; margin-bottom:22px; box-shadow:var(--shadow);
   }
   .card h2{
-    margin-top:0; font-size:15px; text-transform:uppercase; letter-spacing:1.5px;
-    color:var(--navy-2); font-family:'Courier New',monospace;
-    border-bottom:2px solid var(--line); padding-bottom:10px;
+    margin-top:0; font-size:16.5px; letter-spacing:0.2px;
+    color:var(--navy-2); font-weight:800;
+    border-bottom:2px solid var(--line); padding-bottom:12px; margin-bottom:16px;
   }
   .lede{font-size:15px; line-height:1.65; color:#3A4550; max-width:640px;}
 
   /* ---------- Tool tab (CIBIL converter, unchanged core logic) ---------- */
   .drop{
-    border:2px dashed var(--steel); border-radius:2px; padding:36px 20px; text-align:center;
-    cursor:pointer; transition:background 0.15s, border-color 0.15s; background:#FBFAF6;
+    border:2px dashed #A9C6D8; border-radius:var(--radius); padding:40px 20px; text-align:center;
+    cursor:pointer; transition:background 0.15s, border-color 0.15s; background:#F7FBFC;
   }
-  .drop.hover, .drop:hover{ background:#F0EDE2; border-color:var(--gold); }
-  .drop svg{width:38px;height:38px;stroke:var(--steel);margin-bottom:10px;}
-  .drop .big{font-size:16px;font-weight:700;color:var(--navy-2);}
+  .drop.hover, .drop:hover{ background:#EEF7F5; border-color:var(--teal); }
+  .drop svg{width:38px;height:38px;stroke:var(--teal-2);margin-bottom:10px;}
+  .drop .big{font-size:16.5px;font-weight:700;color:var(--navy-2);}
   .drop .small{font-family:'Courier New',monospace;font-size:12px;color:#7A8899;margin-top:6px;}
   input[type=file]{display:none;}
   .status-line{display:flex;align-items:center;gap:10px;font-family:'Courier New',monospace;font-size:13px;margin-top:16px;color:var(--steel);}
+
+  .progress-track{
+    width:100%; height:7px; background:#E4EEEC; border-radius:4px;
+    margin-top:12px; overflow:hidden; position:relative;
+  }
+  .progress-fill{
+    height:100%; width:0%; background:linear-gradient(90deg, var(--teal), var(--green));
+    border-radius:4px; transition:width 0.3s ease;
+  }
+  .progress-fill.indeterminate{
+    width:35% !important; position:absolute; animation:progressSlide 1.1s ease-in-out infinite;
+  }
+  @keyframes progressSlide{
+    0%{ left:-35%; }
+    100%{ left:100%; }
+  }
+  .magic-text{
+    font-family:'Courier New',monospace; font-size:12.5px; color:var(--gold);
+    margin-top:8px; text-align:center; letter-spacing:0.3px;
+  }
   .dot{width:8px;height:8px;border-radius:50%;background:var(--steel);flex:none;}
   .dot.ok{background:var(--green);} .dot.err{background:var(--red);}
   .privacy{font-family:'Courier New',monospace;font-size:12px;color:#7A8899;margin-top:14px;line-height:1.6;}
 
   /* ---------- Password prompt ---------- */
   .password-box{
-    margin-top:16px; padding:16px; background:#FFF8EC; border:1px solid #EAD9AE; border-radius:2px;
+    margin-top:16px; padding:18px; background:#FFF8EC; border:1px solid #EAD9AE; border-radius:var(--radius-sm);
   }
   .password-box label{
     display:block; font-family:'Courier New',monospace; font-size:12px; color:var(--navy-2);
@@ -97,89 +122,83 @@
   }
   .password-row{ display:flex; gap:10px; flex-wrap:wrap; }
   .password-row input{
-    flex:1; min-width:160px; border:1px solid var(--line); border-radius:2px; padding:10px 12px;
-    font-family:Georgia, serif; font-size:14px; background:#fff; color:var(--ink);
+    flex:1; min-width:160px; border:1px solid var(--line); border-radius:var(--radius-sm); padding:11px 14px;
+    font-family:inherit; font-size:14px; background:#fff; color:var(--ink);
   }
-  .password-row input:focus{ outline:none; border-color:var(--gold); }
-  .password-row button{ padding:10px 20px; }
+  .password-row input:focus{ outline:none; border-color:var(--teal); }
+  .password-row button{ padding:11px 22px; }
   .password-error{
     font-family:'Courier New',monospace; font-size:12px; color:var(--red); margin-top:10px;
   }
 
   /* ---------- Ready-to-download banner ---------- */
   .ready-banner{
-    background:#E4F1E9; border:1px solid #BFE3CB; color:var(--green);
-    font-family:'Courier New',monospace; font-size:13px; font-weight:700;
-    padding:12px 14px; border-radius:2px; margin-bottom:14px;
+    background:#E4F5EC; border:1px solid #B9E4CB; color:var(--green);
+    font-size:13.5px; font-weight:700;
+    padding:13px 16px; border-radius:var(--radius-sm); margin-bottom:14px;
   }
   .privacy b{color:var(--navy-2);}
-  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;}
-  th{text-align:left;background:var(--navy);color:#fff;padding:8px 10px;font-family:'Courier New',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;}
-  td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
-  tr:nth-child(even) td{background:#FAF9F4;}
-  .tag{font-family:'Courier New',monospace;font-size:10px;padding:2px 7px;border-radius:10px;display:inline-block;}
-  .tag.active{background:#E4F1E9;color:var(--green);}
-  .tag.closed{background:#EDEDED;color:#666;}
-  .tag.overdue{background:#F8E2E2;color:var(--red);}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:10px;}
+  th{text-align:left;background:var(--navy-2);color:#fff;padding:10px 12px;font-size:11.5px;text-transform:uppercase;letter-spacing:0.5px;}
+  th:first-child{border-top-left-radius:8px;} th:last-child{border-top-right-radius:8px;}
+  td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;}
+  tr:nth-child(even) td{background:#FAFBFC;}
+  .tag{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;display:inline-block;}
+  .tag.active{background:#E1F4EA;color:var(--green);}
+  .tag.closed{background:#EEF1F3;color:#667;}
+  .tag.overdue{background:#FBE6E6;color:var(--red);}
   .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-top:14px;}
-  .stat{background:#FBFAF6;border:1px solid var(--line);padding:14px;}
-  .stat .num{font-size:22px;font-weight:700;color:var(--navy-2);}
+  .stat{background:#F7FBFC;border:1px solid var(--line);padding:16px;border-radius:var(--radius-sm);}
+  .stat .num{font-size:23px;font-weight:800;color:var(--navy-2);}
   .stat .lbl{font-family:'Courier New',monospace;font-size:11px;color:#7A8899;margin-top:4px;text-transform:uppercase;}
-  .table-wrap{max-height:420px;overflow:auto;border:1px solid var(--line);margin-top:10px;}
+  .table-wrap{max-height:420px;overflow:auto;border:1px solid var(--line);margin-top:10px;border-radius:var(--radius-sm);}
   .empty-hint{font-family:'Courier New',monospace;font-size:12px;color:#B84040;margin-top:10px;}
 
   button.primary{
-    background:var(--gold);color:#fff;border:none;padding:14px 26px;
-    font-family:'Courier New',monospace;font-size:13.5px;letter-spacing:0.5px;cursor:pointer;
-    border-radius:2px;text-transform:uppercase;
+    background:linear-gradient(120deg, var(--teal), var(--teal-2));color:#fff;border:none;padding:15px 28px;
+    font-size:14px; font-weight:700; letter-spacing:0.2px;cursor:pointer;
+    border-radius:999px; box-shadow:0 6px 16px rgba(14,147,132,0.28);
+    transition:transform 0.12s ease, box-shadow 0.12s ease;
   }
-  button.primary:hover{background:#A17A34;}
-  button.primary:disabled{background:#ccc;cursor:not-allowed;}
-  button.download{display:none;margin-top:18px;background:var(--green);}
-  button.download:hover{background:#245F3F;}
-
-  .sample-box{
-    margin-top:16px; padding:14px 16px; background:#F6F4EE; border:1px solid var(--line); border-radius:2px;
-  }
-  .sample-box-label{
-    font-family:'Courier New',monospace; font-size:11px; letter-spacing:0.5px; text-transform:uppercase;
-    color:#7A8899; margin-bottom:8px;
-  }
+  button.primary:hover{transform:translateY(-1px); box-shadow:0 8px 20px rgba(14,147,132,0.35);}
+  button.primary:disabled{background:#ccc;cursor:not-allowed;box-shadow:none;}
+  button.download{display:none;margin-top:18px;background:linear-gradient(120deg, var(--green), #167A4E);box-shadow:0 6px 16px rgba(31,157,99,0.3);}
 
   /* ---------- Support tab ---------- */
   .support-wrap{ text-align:center; padding:10px 0 6px; }
   .qr-frame{
-    display:inline-block; background:#0B0B0C; padding:14px; border-radius:14px;
-    box-shadow:0 8px 24px rgba(15,42,71,0.18); max-width:320px; width:100%;
+    display:inline-block; background:#0B0B0C; padding:14px; border-radius:18px;
+    box-shadow:var(--shadow-lg); max-width:320px; width:100%;
   }
-  .qr-frame img{ width:100%; height:auto; border-radius:8px; display:block; pointer-events:none; }
+  .qr-frame img{ width:100%; height:auto; border-radius:10px; display:block; pointer-events:none; }
   .support-note{font-size:13.5px; color:#7A8899; font-family:'Courier New',monospace; margin-top:16px;}
-  .support-headline{font-size:19px; color:var(--navy-2); font-weight:700; margin-bottom:6px;}
+  .support-headline{font-size:20px; color:var(--navy-2); font-weight:800; margin-bottom:6px;}
 
   /* ---------- Forms (Enquiry / Reviews) ---------- */
   form .field{margin-bottom:16px;}
   form label{display:block; font-family:'Courier New',monospace; font-size:11px; letter-spacing:0.5px; text-transform:uppercase; color:var(--navy-2); margin-bottom:6px;}
   form input[type=text], form input[type=tel], form textarea{
-    width:100%; border:1px solid var(--line); border-radius:2px; padding:11px 12px;
-    font-family:Georgia, serif; font-size:14px; background:#FBFAF6; color:var(--ink);
+    width:100%; border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 14px;
+    font-family:inherit; font-size:14px; background:#F7FBFC; color:var(--ink);
   }
-  form input:focus, form textarea:focus{outline:none; border-color:var(--gold); background:#fff;}
+  form input:focus, form textarea:focus{outline:none; border-color:var(--teal); background:#fff;}
   form textarea{resize:vertical; min-height:90px;}
   .star-row{display:flex; gap:6px; font-size:26px;}
   .star{cursor:pointer; color:#D8D2C4; transition:color 0.1s;}
   .star.filled{color:var(--gold);}
   .form-note{font-family:'Courier New',monospace;font-size:11.5px;color:#7A8899;margin-top:10px;line-height:1.6;}
 
-  /* ---------- About the Author ---------- */
-  .about-row{ display:flex; gap:18px; align-items:flex-start; }
+  /* ---------- About the Co-Founder ---------- */
+  .about-row{ display:flex; gap:20px; align-items:flex-start; }
   .about-avatar{
-    flex:none; width:56px; height:56px; border-radius:50%; background:var(--navy);
+    flex:none; width:60px; height:60px; border-radius:50%;
+    background:linear-gradient(135deg, var(--teal), var(--navy-2));
     color:#fff; display:flex; align-items:center; justify-content:center;
-    font-family:'Courier New',monospace; font-weight:700; font-size:16px; letter-spacing:0.5px;
+    font-weight:800; font-size:17px; letter-spacing:0.5px; box-shadow:var(--shadow);
   }
-  .about-name{font-size:17px; font-weight:700; color:var(--navy-2);}
+  .about-name{font-size:18px; font-weight:800; color:var(--navy-2);}
   .about-roles{font-family:'Courier New',monospace; font-size:11px; letter-spacing:0.5px; color:var(--gold); text-transform:uppercase; margin-top:3px;}
-  .wa-note{background:#EAF7EE;border:1px solid #BFE3CB;color:#215B36;font-family:'Courier New',monospace;font-size:12px;padding:10px 12px;border-radius:2px;margin-top:12px;display:none;}
+  .wa-note{background:#EAF7EE;border:1px solid #BFE3CB;color:#215B36;font-family:'Courier New',monospace;font-size:12px;padding:10px 12px;border-radius:var(--radius-sm);margin-top:12px;display:none;}
 
   /* ---------- Reviews list ---------- */
   .review-item{border-bottom:1px solid var(--line); padding:14px 0;}
@@ -190,17 +209,17 @@
   .review-date{font-family:'Courier New',monospace; font-size:10.5px; color:#9AA6B0;}
   .review-text{margin-top:6px; font-size:14px; line-height:1.55; color:#3A4550;}
   .avg-row{display:flex; align-items:center; gap:12px; margin-bottom:18px;}
-  .avg-num{font-size:34px; font-weight:700; color:var(--navy-2);}
+  .avg-num{font-size:36px; font-weight:800; color:var(--navy-2);}
   .avg-meta{font-family:'Courier New',monospace; font-size:11.5px; color:#7A8899;}
 
   footer.site{
-    text-align:center; padding:22px 20px; font-family:'Courier New',monospace;
-    font-size:10.5px; color:#9AA6B0; border-top:1px solid var(--line); margin-top:10px;
+    text-align:center; padding:24px 20px; font-family:'Courier New',monospace;
+    font-size:10.5px; color:#8894A0; border-top:1px solid var(--line); margin-top:10px;
   }
 
   /* ---------- Ad banner slots ---------- */
   .ad-banner{
-    background:#FBFAF6; border:1px dashed var(--steel); border-radius:2px;
+    background:#F7FBFC; border:1px dashed #A9C6D8; border-radius:var(--radius-sm);
     padding:16px; margin:20px 0; text-align:center;
   }
   .ad-banner .ad-label{
@@ -210,9 +229,45 @@
   .ad-banner .ad-slot{
     min-height:90px; display:flex; align-items:center; justify-content:center;
     color:#B7C0C9; font-family:'Courier New',monospace; font-size:12.5px;
-    border:1px solid var(--line); background:#fff;
+    border:1px solid var(--line); background:#fff; border-radius:var(--radius-sm);
   }
-  .ad-banner.leaderboard{max-width:960px;}
+  .ad-banner.leaderboard{max-width:1140px;}
+
+  /* ================= RESPONSIVE: TABLET & DESKTOP ================= */
+  @media (min-width: 720px){
+    .brand-row h1{font-size:30px;}
+    .brand-row .sub{font-size:12.5px;}
+    main{padding:44px 20px 90px;}
+    .card{padding:34px;}
+    .card h2{font-size:18px;}
+    .lede{font-size:16px;}
+    button.primary{padding:15px 32px; font-size:14.5px;}
+
+    /* Home tab: converter + enquiry + about side by side as a two-column layout */
+    #panel-tool{
+      display:grid; grid-template-columns:1.35fr 1fr; gap:22px; align-items:start;
+    }
+    #panel-tool .card{margin-bottom:0;}
+    #panel-tool .card:first-child{ grid-column:1 / 2; grid-row:1 / 3; }
+    #panel-tool .card:nth-child(2){ grid-column:1 / 2; grid-row:3; }
+    #panel-tool .card:nth-child(3){ grid-column:2 / 3; grid-row:1; }
+    #panel-tool .card:nth-child(4){ grid-column:2 / 3; grid-row:2 / 4; }
+
+    .about-row{align-items:center;}
+    .support-wrap .qr-frame{max-width:280px;}
+  }
+
+  @media (min-width: 1000px){
+    .wrap{padding:0 32px;}
+    .card{padding:38px;}
+    .stat-grid{grid-template-columns:repeat(6,1fr);}
+  }
+
+  @media (max-width: 719px){
+    /* Explicit mobile stacking so nothing relies on default flow alone */
+    #panel-tool{display:block;}
+    .about-row{flex-direction:row;}
+  }
 </style>
 </head>
 <body>
@@ -259,6 +314,10 @@
       </div>
       <input type="file" id="fileInput" accept="application/pdf">
       <div class="status-line" id="statusLine"><span class="dot" id="statusDot"></span><span id="statusText">Waiting for a file…</span></div>
+      <div class="progress-track" id="progressTrack" style="display:none;">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="magic-text" id="magicText" style="display:none;">✨ Wait for the magic to happen ✨</div>
 
       <div class="password-box" id="passwordBox" style="display:none;">
         <label for="pdfPasswordInput">This PDF is password protected — enter its password to unlock it</label>
@@ -270,7 +329,7 @@
         <div class="form-note">Your password is used only inside your browser to open the PDF locally — it's never sent anywhere or stored.</div>
       </div>
 
-      <div class="privacy"><b>Privacy note:</b> This page reads the PDF entirely inside your own browser using PDF.js. Your report is never uploaded to any server — closing this tab discards everything.</div>
+      <div class="privacy"><b>Privacy note:</b> This page reads the PDF entirely inside your own browser. Your report is never uploaded to any server — closing this tab discards everything.</div>
     </div>
 
     <div class="card" id="resultsCard" style="display:none;">
@@ -560,6 +619,9 @@ const pdfPasswordInput = document.getElementById('pdfPasswordInput');
 const pdfPasswordSubmit = document.getElementById('pdfPasswordSubmit');
 const passwordError = document.getElementById('passwordError');
 const readyBanner = document.getElementById('readyBanner');
+const progressTrack = document.getElementById('progressTrack');
+const progressFill = document.getElementById('progressFill');
+const magicText = document.getElementById('magicText');
 
 let parsedAccounts = [];
 let parsedEnquiries = [];
@@ -585,6 +647,29 @@ fileInput.addEventListener('change', e => {
 function setStatus(msg, state){
   statusText.textContent = msg;
   statusDot.className = 'dot' + (state ? ' ' + state : '');
+}
+
+// A running green bar while the file is being read/OCR'd/parsed, plus a
+// friendly "hang in there" line — shown from the moment a file is picked
+// until parsing finishes (or an error stops things early).
+function startProgress(){
+  progressTrack.style.display = 'block';
+  progressFill.className = 'progress-fill indeterminate';
+  magicText.style.display = 'block';
+}
+function updateProgress(fraction){
+  progressFill.className = 'progress-fill';
+  progressFill.style.width = Math.max(0, Math.min(100, fraction * 100)) + '%';
+}
+function stopProgress(success){
+  if (success){
+    progressFill.className = 'progress-fill';
+    progressFill.style.width = '100%';
+    setTimeout(() => { progressTrack.style.display = 'none'; magicText.style.display = 'none'; }, 500);
+  } else {
+    progressTrack.style.display = 'none';
+    magicText.style.display = 'none';
+  }
 }
 
 function hidePasswordPrompt(){
@@ -698,6 +783,7 @@ async function handleFile(file){
   loanTableBody.innerHTML = '';
   statGrid.innerHTML = '';
   hidePasswordPrompt();
+  startProgress();
   try{
     const buf = await file.arrayBuffer();
     const pdf = await loadPdfWithPassword(buf);
@@ -706,6 +792,7 @@ async function handleFile(file){
     for (let i = 1; i <= pdf.numPages; i++){
       if (requestId !== currentRequestId) return; // superseded by a newer upload
       setStatus(`Extracting text — page ${i} of ${pdf.numPages}…`);
+      updateProgress((i - 1) / pdf.numPages * 0.85);
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
       let pageText = itemsToText(content.items);
@@ -725,15 +812,18 @@ async function handleFile(file){
     }
     if (requestId !== currentRequestId) return; // superseded by a newer upload
     setStatus('Parsing loan accounts…');
+    updateProgress(0.92);
     parseReport(fullText);
     renderResults();
     const scannedNote = scannedPageCount > 0 ? ` (${scannedPageCount} scanned page${scannedPageCount===1?'':'s'} read via OCR)` : '';
     setStatus(`Done — found ${parsedAccounts.length} accounts and ${parsedEnquiries.length} enquiries.${scannedNote}`, 'ok');
     readyBanner.style.display = 'block';
+    stopProgress(true);
   }catch(err){
     if (requestId !== currentRequestId) return; // superseded by a newer upload
     console.error(err);
     setStatus('Could not read this PDF. It may be a scanned image rather than a text PDF.', 'err');
+    stopProgress(false);
   }
 }
 
@@ -781,11 +871,21 @@ function parseReport(text){
   if (parsedAccounts.length === 0){
     parseFormatB(text);
   }
-  // Still nothing — this may be a different bureau entirely (Experian, Equifax,
-  // CRIF High Mark) or a layout we haven't seen. Fall back to a generic,
-  // best-effort keyword scanner rather than showing nothing at all.
+  // Still nothing — try the Paisabazaar-style "Credit Health Report" layout
+  // ("Product Type - X   Status: Active/Closed" per account).
   if (parsedAccounts.length === 0){
     parseFormatC(text);
+  }
+  // Still nothing — try Experian's Credit Report layout (often a scanned PDF,
+  // read via OCR: "Account Number / Loan Type / Sanctioned Amt / Current Balance").
+  if (parsedAccounts.length === 0){
+    parseFormatD(text);
+  }
+  // Still nothing — this may be a different bureau entirely (Equifax, CRIF
+  // High Mark) or a layout we haven't seen. Fall back to a generic,
+  // best-effort keyword scanner rather than showing nothing at all.
+  if (parsedAccounts.length === 0){
+    parseFormatE(text);
   }
 }
 
@@ -869,7 +969,7 @@ const NUMERIC_B = new Set([
   "Amount Overdue","Rate of Interest","Repayment Tenure","EMI Amount","Actual Payment Amount"
 ]);
 const labelAltB = [...LABELS_B].sort((a,b) => b.length - a.length).map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-const fieldRegexB = new RegExp(`(${labelAltB})\\s*([\\s\\S]*?)(?=(?:${labelAltB})|PAYMENT STATUS|ACCOUNT DETAILS|$)`, 'g');
+const fieldRegexB = new RegExp(`(${labelAltB})\\s*([\\s\\S]*?)(?=(?:${labelAltB})|PAYMENT STATUS|Payment Status|ACCOUNT DETAILS|Account Details|$)`, 'gi');
 
 function extractFieldsB(block){
   const out = {};
@@ -888,14 +988,36 @@ function extractFieldsB(block){
   return out;
 }
 
+// Some CIBIL self-check reports print accounts as a mini table — a header row
+// ("Member Name  Account Type  Account Number  Ownership") followed by the
+// actual values on the next line — rather than each label sitting directly
+// next to its own value. When that happens, the normal label/value matching
+// above captures nothing for those four fields, so recover them here by
+// scanning for known loan-type and ownership keywords instead.
+const LOAN_TYPE_KEYWORDS_B = [
+  "Business Loan - Unsecured","Business Loan – General","Business Loan General","Business Loan Unsecured",
+  "Business Loan","Personal Loan","Consumer Loan","Housing Loan","Home Loan","Two-Wheeler Loan",
+  "Twowheeler Loan","Auto Loan","Credit Card","Overdraft","Gold Loan","Property Loan",
+  "Loan Against Shares","Commercial Vehicle Loan","Construction Equipment Loan"
+];
+function recoverTypeOwnershipB(block){
+  const headerArea = block.split(/ACCOUNT DETAILS|Account Details/)[0];
+  let type = '';
+  for (const kw of LOAN_TYPE_KEYWORDS_B){
+    if (headerArea.includes(kw)){ type = kw; break; }
+  }
+  const ownMatch = headerArea.match(/\b(Individual|Joint|Guarantor|Authorized User)\b/);
+  return { type, ownership: ownMatch ? ownMatch[1] : '' };
+}
+
 function parseFormatB(text){
   parsedAccounts = [];
   parsedEnquiries = [];
 
-  const nameMatch = text.match(/\bName\s+([A-Z][A-Za-z .\/]+?)\s+Date Of Birth/i);
+  const nameMatch = text.match(/(?<!Member )\bName\s*:?\s*([A-Z][A-Za-z .\/]+?)\s*(?:\n\s*)?(?:DOB|Date Of Birth)/i);
   consumerName = nameMatch ? clean(nameMatch[1]) : '';
 
-  const scoreMatch = text.match(/CIBIL Score is (\d{3})/i);
+  const scoreMatch = text.match(/CIBIL Score is (\d{3})/i) || text.match(/Your CIBIL Score\s*\n*\s*(\d{3})\b/i);
   reportMeta.score = scoreMatch ? scoreMatch[1] : '';
 
   const blockStarts = [];
@@ -922,10 +1044,22 @@ function parseFormatB(text){
       let status = closedVal ? 'Closed' : 'Active';
       if (overdue && parseFloat(overdue.replace(/,/g,'')) > 0) status = 'Active — OVERDUE ₹' + overdue;
 
+      let type = f['Account Type'] || '';
+      let ownership = f['Ownership'] || '';
+      if (!type){
+        // Empty Account Type is the tell-tale sign this block used the
+        // header-row/data-row table layout, which also means whatever
+        // "Ownership" captured is really the whole unsplit data line —
+        // replace it with the cleanly recovered value, don't just fall back.
+        const recovered = recoverTypeOwnershipB(b);
+        type = recovered.type || type;
+        ownership = recovered.ownership || ownership;
+      }
+
       parsedAccounts.push({
         idx: accIdx,
-        type: f['Account Type'] || '',
-        ownership: f['Ownership'] || '',
+        type,
+        ownership,
         opened: f['Date Opened / Disbursed'] || '',
         closed: closedVal,
         sanctioned, balance: balanceRaw, balanceNum,
@@ -949,11 +1083,185 @@ function parseFormatB(text){
   reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
 }
 
-// Format C — generic best-effort scanner for any report we don't have an exact
+// Format C — the "Credit Health Report" layout used by aggregator sites like
+// Paisabazaar (Powered by CIBIL). Each account reads as
+// "{LENDER}\nProduct Type - {Type} Status: {Active/Closed}" followed by a
+// plain label/value list, one pair per line.
+const LABELS_C = [
+  "Account Number","Ownership","Credit Limit","Cash Limit","Payment Frequency",
+  "Last Payment Date","Last Payment","Value of Collateral","Type of Collateral",
+  "Last Updated Date","Date Opened","Date Closed","Sanction Amount","High Credit",
+  "Current Outstanding","Overdue Amount","Rate of Interest","Repayment Tenure","EMI Amount"
+];
+const NUMERIC_C = new Set(["Credit Limit","Cash Limit","Last Payment","Sanction Amount","High Credit","Current Outstanding","Overdue Amount","EMI Amount"]);
+const labelAltC = [...LABELS_C].sort((a,b) => b.length - a.length).map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+const fieldRegexC = new RegExp(`(${labelAltC})\\s*([\\s\\S]*?)(?=(?:${labelAltC})|Payment History|$)`, 'g');
+const acctHeaderRegexC = /Product Type - ([^\n]+?) Status: (Active|Closed|Post \(WO\) Settled|[\w() ]+)\n/g;
+
+function extractFieldsC(block){
+  const out = {};
+  let m;
+  fieldRegexC.lastIndex = 0;
+  while ((m = fieldRegexC.exec(block)) !== null){
+    const key = m[1].trim();
+    let val = clean(m[2]);
+    if (val === 'NA') val = '';
+    if (NUMERIC_C.has(key) && val){
+      const numMatch = val.replace('₹','').trim().match(/^-?[\d,]+(\.\d+)?/);
+      val = numMatch ? numMatch[0] : val;
+    }
+    if (!(key in out)) out[key] = val;
+  }
+  return out;
+}
+
+function parseFormatC(text){
+  parsedAccounts = [];
+  parsedEnquiries = [];
+
+  const nameMatch = text.match(/\bHey\s+([A-Z][A-Za-z .]+?),/);
+  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+
+  const scoreMatch = text.match(/Powered by\s*\n*\s*(\d{3})\b/);
+  reportMeta.score = scoreMatch ? scoreMatch[1] : '';
+
+  acctHeaderRegexC.lastIndex = 0;
+  const matches = [];
+  let hm;
+  while ((hm = acctHeaderRegexC.exec(text)) !== null) matches.push(hm);
+
+  matches.forEach((m, i) => {
+    const ptype = clean(m[1]);
+    const blockStart = m.index + m[0].length;
+    const blockEnd = i + 1 < matches.length ? matches[i+1].index : text.length;
+    let block = text.substring(blockStart, blockEnd);
+    const stopIdx = block.indexOf('Payment History');
+    if (stopIdx !== -1) block = block.substring(0, stopIdx);
+
+    const f = extractFieldsC(block);
+    const balanceRaw = f['Current Outstanding'] || '';
+    const balanceNum = balanceRaw === '' ? '' : (parseFloat(balanceRaw.replace(/,/g,'')) || 0);
+    const closedVal = f['Date Closed'] || '';
+    const overdue = f['Overdue Amount'] || '';
+    let status = closedVal ? 'Closed' : 'Active';
+    if (overdue && parseFloat(overdue.replace(/,/g,'')) > 0) status = 'Active — OVERDUE ₹' + overdue;
+
+    parsedAccounts.push({
+      idx: i + 1, type: ptype, ownership: f['Ownership'] || '',
+      opened: f['Date Opened'] || '', closed: closedVal,
+      sanctioned: f['Sanction Amount'] || f['High Credit'] || '',
+      balance: balanceRaw, balanceNum,
+      emi: f['EMI Amount'] || '',
+      limit: [f['Credit Limit'], f['Cash Limit']].filter(Boolean).join(' / '),
+      interest: f['Rate of Interest'] || '', tenure: f['Repayment Tenure'] || '', status
+    });
+  });
+
+  const enqIdxs = [];
+  let em;
+  const enqSectionRegex = /Credit Enquiries/g;
+  while ((em = enqSectionRegex.exec(text)) !== null) enqIdxs.push(em.index);
+  if (enqIdxs.length >= 2){
+    let section = text.substring(enqIdxs[1]);
+    const tipIdx = section.indexOf('Tip');
+    if (tipIdx !== -1) section = section.substring(0, tipIdx);
+    const enqRegex = /([A-Z][A-Za-z0-9 .&()\-]*?)\s+(Business Loan Unsecured|Business Loan General|Personal Loan|Consumer Loan|Credit Card|Auto Loan \(Personal\)|Two-Wheeler Loan|Housing Loan|Overdraft|Other)\s+(\d{1,2} [A-Za-z]{3} \d{4})\s+₹\s*([\d,]+)/g;
+    let qm;
+    while ((qm = enqRegex.exec(section)) !== null){
+      parsedEnquiries.push({ date: qm[3], purpose: clean(qm[1]) + ' — ' + qm[2], amount: qm[4] });
+    }
+  }
+
+  reportMeta.totalAccounts = String(parsedAccounts.length);
+  reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
+}
+
+// Format D — Experian Credit Report. These are very often shared as a
+// scanned/re-printed PDF (no text layer), so this text usually arrives via
+// this page's OCR fallback rather than a native PDF text layer — matching is
+// therefore intentionally order-independent (labels are found wherever they
+// land, not assumed to follow a fixed sequence).
+const LABELS_D = [
+  "Account Number","Date Opened","Date Closed","Ownership","Rate of Interest",
+  "Value of Collateral","Type of Collateral","Date Reported","Loan Type","Account Status",
+  "Sanctioned Amt","Current Balance","Amount Overdue","Last Payment Date",
+  "Credit Limit Amt","Repayment Tenure","Total Write-off Amt","Principal Write-off",
+  "Settlement Amt","Credit Facility Status","EMI"
+];
+const NUMERIC_D = new Set(["Sanctioned Amt","Current Balance","Amount Overdue","Credit Limit Amt","Value of Collateral","Total Write-off Amt","Principal Write-off","Settlement Amt","EMI"]);
+const labelAltD = [...LABELS_D].sort((a,b) => b.length - a.length).map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+const fieldRegexD = new RegExp(`(${labelAltD})\\s*([\\s\\S]*?)(?=(?:${labelAltD})|Payment History|Consumer Personal|$)`, 'g');
+
+function extractFieldsD(block){
+  const out = {};
+  let m;
+  fieldRegexD.lastIndex = 0;
+  while ((m = fieldRegexD.exec(block)) !== null){
+    const key = m[1].trim();
+    let val = clean(m[2]);
+    if (val === '-' || val === '.') val = '';
+    if (NUMERIC_D.has(key) && val){
+      const numMatch = val.replace('₹','').trim().match(/^-?[\d,]+(\.\d+)?/);
+      val = numMatch ? numMatch[0] : val;
+    }
+    if (!(key in out)) out[key] = val;
+  }
+  return out;
+}
+
+function parseFormatD(text){
+  parsedAccounts = [];
+  parsedEnquiries = [];
+
+  if (!/experian/i.test(text)) return; // don't misfire on unrelated formats
+
+  const nameMatch = text.match(/\bName\s+([A-Z][A-Za-z .]+?)\s*\n/i);
+  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+
+  const scoreMatch = text.match(/CREDIT SCORE[\s\S]{0,40}?(\d{3})\b/i);
+  reportMeta.score = scoreMatch ? scoreMatch[1] : '';
+
+  const blockStarts = [];
+  const re = /Account Number/gi;
+  let mm;
+  while ((mm = re.exec(text)) !== null) blockStarts.push(mm.index);
+
+  const blocks = blockStarts.map((start, i) => {
+    const end = i + 1 < blockStarts.length ? blockStarts[i+1] : text.length;
+    return text.substring(start, end);
+  });
+
+  blocks.forEach((b, i) => {
+    const f = extractFieldsD(b);
+    if (!f['Loan Type'] && !f['Sanctioned Amt'] && !f['Current Balance']) return; // not a real account block
+
+    const balanceRaw = f['Current Balance'] || '';
+    const balanceNum = balanceRaw === '' ? '' : (parseFloat(balanceRaw.replace(/,/g,'')) || 0);
+    const closedVal = f['Date Closed'] || '';
+    const overdue = f['Amount Overdue'] || '';
+    const statusRaw = (f['Account Status'] || '').toUpperCase();
+    let status = statusRaw === 'CLOSED' || closedVal ? 'Closed' : 'Active';
+    if (overdue && parseFloat(overdue.replace(/,/g,'')) > 0) status = 'Active — OVERDUE ₹' + overdue;
+
+    parsedAccounts.push({
+      idx: parsedAccounts.length + 1,
+      type: f['Loan Type'] || '', ownership: f['Ownership'] || '',
+      opened: f['Date Opened'] || '', closed: closedVal,
+      sanctioned: f['Sanctioned Amt'] || '', balance: balanceRaw, balanceNum,
+      emi: f['EMI'] || '', limit: f['Credit Limit Amt'] || '',
+      interest: f['Rate of Interest'] || '', tenure: f['Repayment Tenure'] || '', status
+    });
+  });
+
+  reportMeta.totalAccounts = String(parsedAccounts.length);
+  reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
+}
+
+// Format E — generic best-effort scanner for any report we don't have an exact
 // parser for (Experian, Equifax, CRIF High Mark, or an unseen CIBIL layout).
 // This uses loose keyword matching rather than an exact template, so results
 // are approximate — the UI flags this clearly via reportMeta.genericFallback.
-function parseFormatC(text){
+function parseFormatE(text){
   parsedAccounts = [];
   parsedEnquiries = [];
   reportMeta.genericFallback = true;
