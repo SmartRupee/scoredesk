@@ -846,6 +846,22 @@ const NUMERIC_FIELDS = new Set([
   "CASH LIMIT","OVERDUE","REPAYMENT TENURE","INTEREST RATE","ACTUAL PAYMENT"
 ]);
 
+// Shared across formats: CIBIL's fixed enquiry-purpose taxonomy. Matching
+// enquiry rows against this known list — rather than guessing where a
+// free-text lender name ends — is what makes enquiry parsing robust to
+// lender names that wrap across 1-2 lines and to "header printed once,
+// rows below have no repeated label" table layouts.
+const ENQUIRY_PURPOSES = [
+  "Business Loan – Priority Sector – Small Business","Business Loan - Priority Sector - Small Business",
+  "Business Loan – Unsecured","Business Loan - Unsecured",
+  "Business Loan – Secured","Business Loan - Secured",
+  "Business Loan – General","Business Loan - General",
+  "Personal Loan","Consumer Loan","Credit Card","Housing Loan","Property Loan",
+  "Two-wheeler Loan","Two Wheeler Loan","Auto Loan","Gold Loan","Overdraft","Other"
+];
+const enquiryPurposeAlt = [...ENQUIRY_PURPOSES].sort((a,b)=>b.length-a.length)
+  .map(p => p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/\s+/g,'\\s+')).join('|');
+
 function extractFields(block){
   const out = {};
   let m;
@@ -880,6 +896,19 @@ function parseReport(text){
   // read via OCR: "Account Number / Loan Type / Sanctioned Amt / Current Balance").
   if (parsedAccounts.length === 0){
     parseFormatD(text);
+  }
+  // Still nothing — try the full "download report" export from
+  // myscore.cibil.com (the desktop web portal). This layout prints every
+  // account's Type/Account Number/Ownership as one continuous list first,
+  // then prints every account's Credit Limit/Sanctioned Amount/Balance/EMI/
+  // etc as a SECOND, separate list further down the page (after Personal
+  // and Employment Information). Format B's per-account block search doesn't
+  // apply here because the two halves of each account are pages apart, not
+  // adjacent — hence accounts "verify" (a type shows up) but every numeric
+  // column comes back blank. This parser re-stitches the two lists by
+  // matching position.
+  if (parsedAccounts.length === 0){
+    parseFormatF(text);
   }
   // Still nothing — this may be a different bureau entirely (Equifax, CRIF
   // High Mark) or a layout we haven't seen. Fall back to a generic,
@@ -978,7 +1007,7 @@ function extractFieldsB(block){
   while ((m = fieldRegexB.exec(block)) !== null){
     const key = m[1].trim();
     let val = clean(m[2]);
-    if (val === '-') val = '';
+    if (/^-+$/.test(val)) val = ''; // handles both '-' and '--' placeholders
     if (NUMERIC_B.has(key) && val){
       const numMatch = val.replace('₹','').trim().match(/^-?[\d,]+(\.\d+)?/);
       val = numMatch ? numMatch[0] : val;
@@ -1010,6 +1039,38 @@ function recoverTypeOwnershipB(block){
   return { type, ownership: ownMatch ? ownMatch[1] : '' };
 }
 
+// Some exports print the "Member Name / Account Type / Account Number /
+// Ownership" header row only ONCE for the whole accounts table (a leftover
+// <thead> from the source HTML), so every account after the first has no
+// labels at all — just "LENDER TYPE ACCTNO OWNERSHIP" run together as plain
+// text. Without this, they'd all get vacuumed into whatever field of the
+// FIRST account happened to still be capturing when the next account's
+// bare data line appeared, silently dropping every account but the first.
+// Detect the repeating "<loan type> <acct#> <ownership>\nAccount Details"
+// pattern and use each occurrence as an additional block boundary.
+const loanTypeAltB = [...LOAN_TYPE_KEYWORDS_B].sort((a,b) => b.length - a.length)
+  .map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+const embeddedAccountRegexB = new RegExp(`(?:${loanTypeAltB})\\s+[A-Za-z0-9\\-]+\\s+(?:Individual|Joint|Guarantor|Authorized User)\\s*\\n\\s*(?:ACCOUNT DETAILS|Account Details)`, 'g');
+
+function splitEmbeddedAccountsB(block){
+  embeddedAccountRegexB.lastIndex = 0;
+  const rawStarts = [];
+  let m;
+  while ((m = embeddedAccountRegexB.exec(block)) !== null) rawStarts.push(m.index);
+  if (rawStarts.length <= 1) return [block]; // nothing embedded — just the block's own header, if any
+
+  // Each match lands ON the loan-type keyword (e.g. "Consumer Loan ..."),
+  // but the lender name in front of it on the same line (e.g. "BAJAJ FIN
+  // LTD Consumer Loan ...") belongs to this new account, not the previous
+  // one — back the split point up to the start of that line.
+  const starts = [...new Set(rawStarts.map(idx => {
+    const lineStart = block.lastIndexOf('\n', idx - 1);
+    return lineStart === -1 ? 0 : lineStart + 1;
+  }))];
+  if (starts.length <= 1) return [block];
+  return starts.map((s, i) => block.substring(s, i + 1 < starts.length ? starts[i+1] : block.length));
+}
+
 function parseFormatB(text){
   parsedAccounts = [];
   parsedEnquiries = [];
@@ -1020,20 +1081,33 @@ function parseFormatB(text){
   const scoreMatch = text.match(/CIBIL Score is (\d{3})/i) || text.match(/Your CIBIL Score\s*\n*\s*(\d{3})\b/i);
   reportMeta.score = scoreMatch ? scoreMatch[1] : '';
 
+  // Stop collecting account blocks once the Enquiry Information section
+  // starts — that section usually has its own "Member Name" table header
+  // (for the enquiries table), which isn't a new account. Without this cap,
+  // the last real account's block runs past that heading and swallows it,
+  // corrupting whatever field capture was still in progress (typically
+  // "Date Closed", which then falsely marks the account Closed).
+  const enqSectionStartIdx = text.search(/Enquiry Information/i);
   const blockStarts = [];
   const re = /Member Name/g;
   let mm;
-  while ((mm = re.exec(text)) !== null) blockStarts.push(mm.index);
+  while ((mm = re.exec(text)) !== null){
+    if (enqSectionStartIdx !== -1 && mm.index >= enqSectionStartIdx) break;
+    blockStarts.push(mm.index);
+  }
 
   const blocks = blockStarts.map((start, i) => {
-    const end = i + 1 < blockStarts.length ? blockStarts[i+1] : text.length;
+    let end = i + 1 < blockStarts.length ? blockStarts[i+1] : text.length;
+    if (enqSectionStartIdx !== -1 && end > enqSectionStartIdx) end = enqSectionStartIdx;
     return text.substring(start, end);
   });
 
   let accIdx = 0;
   blocks.forEach(b => {
-    if (b.includes('Account Type')){
-      const f = extractFieldsB(b);
+    const subBlocks = splitEmbeddedAccountsB(b);
+    subBlocks.forEach(sb => {
+    if (sb.includes('Account Type') || sb.includes('Account Details') || sb.includes('ACCOUNT DETAILS')){
+      const f = extractFieldsB(sb);
       accIdx++;
       const closedVal = f['Date Closed'] || '';
       const balanceRaw = f['Current Balance'] || '';
@@ -1051,7 +1125,7 @@ function parseFormatB(text){
         // header-row/data-row table layout, which also means whatever
         // "Ownership" captured is really the whole unsplit data line —
         // replace it with the cleanly recovered value, don't just fall back.
-        const recovered = recoverTypeOwnershipB(b);
+        const recovered = recoverTypeOwnershipB(sb);
         type = recovered.type || type;
         ownership = recovered.ownership || ownership;
       }
@@ -1069,15 +1143,27 @@ function parseFormatB(text){
         tenure: f['Repayment Tenure'] || '',
         status
       });
-    } else if (b.includes('Date Of Enquiry')){
-      const f = extractFieldsB(b);
-      parsedEnquiries.push({
-        date: f['Date Of Enquiry'] || '',
-        purpose: (f['Member Name'] ? f['Member Name'] + ' — ' : '') + (f['Enquiry Purpose'] || ''),
-        amount: ''
-      });
     }
+    });
   });
+
+  // Enquiries live under a "Member Name / Date Of Enquiry / Enquiry Purpose"
+  // heading that — unlike the account blocks above — usually prints ONCE as
+  // a table header, with each row below it just being LENDER / DATE /
+  // PURPOSE with no repeated "Member Name" label to split blocks on. Scanning
+  // by "Member Name" occurrence (as the accounts above do) collapses every
+  // row into one garbled block, so match enquiries independently instead,
+  // anchored on CIBIL's fixed enquiry-purpose taxonomy rather than guessing
+  // where a free-text lender name ends.
+  const enqSectionMatch = text.match(/Enquiry Information[\s\S]*$/i);
+  if (enqSectionMatch){
+    const flat = enqSectionMatch[0].replace(/[ \t]*\n[ \t]*/g, ' ');
+    const enqRegex = new RegExp(`([A-Z][A-Z0-9 .&\\-]*?)\\s+(\\d{2}[\\/\\-]\\d{2}[\\/\\-]\\d{4})\\s+(${enquiryPurposeAlt})`, 'g');
+    let em;
+    while ((em = enqRegex.exec(flat)) !== null){
+      parsedEnquiries.push({ date: em[2], purpose: clean(em[1]) + ' — ' + clean(em[3]), amount: '' });
+    }
+  }
 
   reportMeta.totalAccounts = String(parsedAccounts.length);
   reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
@@ -1199,7 +1285,7 @@ function extractFieldsD(block){
   while ((m = fieldRegexD.exec(block)) !== null){
     const key = m[1].trim();
     let val = clean(m[2]);
-    if (val === '-' || val === '.') val = '';
+    if (/^-+$/.test(val) || val === '.') val = '';
     if (NUMERIC_D.has(key) && val){
       const numMatch = val.replace('₹','').trim().match(/^-?[\d,]+(\.\d+)?/);
       val = numMatch ? numMatch[0] : val;
@@ -1252,6 +1338,107 @@ function parseFormatD(text){
       interest: f['Rate of Interest'] || '', tenure: f['Repayment Tenure'] || '', status
     });
   });
+
+  reportMeta.totalAccounts = String(parsedAccounts.length);
+  reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
+}
+
+// Format F — myscore.cibil.com "download full report" desktop web export.
+// Account headers (Lender / Account Type / Account Number / Ownership) are
+// all listed together in one continuous "Accounts" section near the top.
+// The matching numeric fields (Credit Limit, Sanctioned Amount, Current
+// Balance, EMI, etc.) for those SAME accounts are printed a second time,
+// separately, further down the page — after Personal Information and
+// Employment Information — as one continuous run of per-account detail
+// blocks in the same left-to-right order as the headers above. This is a
+// side effect of how the source web page's accordion sections get flattened
+// into a linear PDF text layer. Re-stitch the two lists back together by
+// position rather than by proximity in the text.
+const headerRegexF = /([A-Z][A-Z0-9&.\-]+(?:\s+[A-Z0-9&.\-]+)*)\s*\n\s*Account Type\s*\n\s*([A-Za-z][A-Za-z \-]*?)\s*\n\s*Account Number\s*\n\s*([A-Za-z0-9\-\u2010-\u2015]+(?:\s*\n\s*[A-Za-z0-9]+)?)\s*\n\s*(?:\d+\s*\n\s*)?Ownership\s*\n\s*(Individual|Joint|Guarantor|Authorized User)/g;
+
+function parseFormatF(text){
+  parsedAccounts = [];
+  parsedEnquiries = [];
+
+  const nameMatch = text.match(/\bName\s*\n\s*DOB\s*\n\s*Gender\s*\n\s*([\s\S]+?)\n\s*\d{2}\/\d{2}\/\d{4}/);
+  if (nameMatch){
+    // Some exports render the name twice, the second copy truncated (a
+    // leftover hover/tooltip artifact) — e.g. "NILESH TIWARI NILESH TIWA".
+    // Cut at the first repeated word instead of keeping the garbled tail.
+    const words = clean(nameMatch[1]).split(' ');
+    const dupeAt = words.findIndex((w, i) => i > 0 && w === words[0]);
+    consumerName = (dupeAt > 0 ? words.slice(0, dupeAt) : words).join(' ');
+  } else {
+    consumerName = '';
+  }
+
+  const scoreMatch = text.match(/Your CIBIL Score\s*\n\s*\d{3}\s*\n\s*(\d{3})\s+900\b/);
+  reportMeta.score = scoreMatch ? scoreMatch[1] : '';
+
+  headerRegexF.lastIndex = 0;
+  const headers = [];
+  let hm;
+  while ((hm = headerRegexF.exec(text)) !== null){
+    headers.push({ lender: clean(hm[1]), type: clean(hm[2]), ownership: hm[4] });
+  }
+  if (headers.length === 0) return; // not this format — let the next parser try
+
+  // The detail section starts at the LAST "Account Information" heading
+  // (the employment section can also use that phrase once, earlier) and
+  // runs until "Enquiry Information".
+  const acctInfoIdx = text.lastIndexOf('Account Information');
+  const enqInfoIdx = text.indexOf('Enquiry Information', acctInfoIdx === -1 ? 0 : acctInfoIdx);
+
+  let detailBlocks = [];
+  if (acctInfoIdx !== -1){
+    const detailSection = text.substring(acctInfoIdx, enqInfoIdx !== -1 ? enqInfoIdx : text.length);
+    const blockStartRe = /\bCredit Limit\b/g;
+    const starts = [];
+    let sm;
+    while ((sm = blockStartRe.exec(detailSection)) !== null) starts.push(sm.index);
+    detailBlocks = starts.map((s, i) => detailSection.substring(s, i + 1 < starts.length ? starts[i + 1] : detailSection.length));
+  }
+
+  const n = Math.max(headers.length, detailBlocks.length);
+  for (let i = 0; i < n; i++){
+    const h = headers[i] || {};
+    const f = detailBlocks[i] ? extractFieldsB(detailBlocks[i]) : {};
+    const closedVal = f['Date Closed'] || '';
+    const balanceRaw = f['Current Balance'] || '';
+    const balanceNum = balanceRaw === '' ? '' : (parseFloat(balanceRaw.replace(/,/g,'')) || 0);
+    const overdue = f['Amount Overdue'] || '';
+    let status = closedVal ? 'Closed' : 'Active';
+    if (overdue && parseFloat(overdue.replace(/,/g,'')) > 0) status = 'Active — OVERDUE ₹' + overdue;
+
+    parsedAccounts.push({
+      idx: i + 1,
+      type: h.type || '',
+      ownership: h.ownership || '',
+      opened: f['Date Opened / Disbursed'] || '',
+      closed: closedVal,
+      sanctioned: f['Sanctioned Amount'] || f['High Credit'] || '',
+      balance: balanceRaw, balanceNum,
+      emi: f['EMI Amount'] || '',
+      limit: [f['Credit Limit'], f['Cash Limit']].filter(Boolean).join(' / '),
+      interest: f['Rate of Interest'] || '',
+      tenure: f['Repayment Tenure'] || '',
+      status
+    });
+  }
+
+  // Enquiries: a single "Member Name  Date of Enquiry  Enquiry Purpose"
+  // header row, then repeating LENDER / DATE / PURPOSE rows where the
+  // lender name can wrap across 1-2 lines (e.g. "HERO\nFINCORP"). Matching
+  // the purpose against CIBIL's fixed taxonomy (rather than guessing where
+  // a free-text lender name ends) makes this robust to that wrapping.
+  if (enqInfoIdx !== -1){
+    const enqSection = text.substring(enqInfoIdx).replace(/[ \t]*\n[ \t]*/g, ' ');
+    const enqRegex = new RegExp(`([A-Z][A-Z0-9 .&\\-]*?)\\s+(\\d{2}\\/\\d{2}\\/\\d{4})\\s+(${enquiryPurposeAlt})`, 'g');
+    let em;
+    while ((em = enqRegex.exec(enqSection)) !== null){
+      parsedEnquiries.push({ date: em[2], purpose: clean(em[1]) + ' — ' + clean(em[3]), amount: '' });
+    }
+  }
 
   reportMeta.totalAccounts = String(parsedAccounts.length);
   reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
