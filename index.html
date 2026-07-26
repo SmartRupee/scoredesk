@@ -910,10 +910,29 @@ function parseReport(text){
   if (parsedAccounts.length === 0){
     parseFormatF(text);
   }
+  // Still nothing — try the lender/aggregator-branded layout (e.g. an
+  // "SBI HOME LOAN" portal pull): "Member Name" repeats per account like
+  // Format B, but the account details are a 4-column "ACCOUNT | DATES |
+  // AMOUNTS | ACCOUNT CONDITION" table with its own label set, so Format B's
+  // "Account Type"/"Account Details" gate never fires for it.
+  if (parsedAccounts.length === 0){
+    parseFormatG(text);
+  }
+  // Still nothing — check for myscore.cibil.com's "CreditView" Overview/
+  // Summary dashboard export: a 4-page aggregate-counts summary with no
+  // itemized account table at all (by design, not a parsing failure), whose
+  // browser-print output draws bold section labels via overlapping repeated
+  // text — e.g. "Name" reads back from the PDF as "NameNameName". Handling
+  // it as its own format (rather than falling through to the generic
+  // scanner) is what lets name/score be recovered correctly despite that.
+  let formatHMatched = false;
+  if (parsedAccounts.length === 0){
+    formatHMatched = parseFormatH(text);
+  }
   // Still nothing — this may be a different bureau entirely (Equifax, CRIF
   // High Mark) or a layout we haven't seen. Fall back to a generic,
   // best-effort keyword scanner rather than showing nothing at all.
-  if (parsedAccounts.length === 0){
+  if (parsedAccounts.length === 0 && !formatHMatched){
     parseFormatE(text);
   }
 }
@@ -1444,6 +1463,177 @@ function parseFormatF(text){
   reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
 }
 
+// Format G — a lender/aggregator-branded pull of CIBIL's "Score & Credit
+// Report" (seen with an "SBI HOME LOAN" footer link, likely served from a
+// bank's loan-application portal rather than myscore.cibil.com directly).
+// It looks close to Format B at a glance ("Member Name" repeats per account,
+// no "Account Type"/"Account Details" markers) but is really a 4-column
+// table per account — "SEQ. ACCOUNT | DATES | AMOUNTS | ACCOUNT CONDITION" —
+// flattened row-by-row into interleaved "Label :value" pairs on each text
+// line, then followed by a separate "COLLATERAL / DEFAULT STATUS" pair of
+// columns. Format B's per-block gate (`Account Type` / `Account Details`)
+// never fires here, which is why this layout fell all the way through to
+// the generic scanner and came back empty. Note: the CIBIL Score itself is
+// drawn as a gauge image in this layout, not printed as text, so it can't
+// be recovered from the text layer — that field is left blank here.
+const LABELS_G = [
+  "Member Name","Account Number","Ownership","Type",
+  "Opened","Closed","Reported","History Start","History End",
+  "CREDIT LIMIT","HIGH CREDIT","CURRENT BALANCE","CASH LIMIT","AMOUNT OVERDUE",
+  "EMI Term Month","EMI","Account Condition","Rate of interest","Payment Frequency",
+  "VALUE OF COLLATERAL","TYPE OF COLLATERAL","SUIT FILED/WILFUL DEFAULT","CREDIT FACILITY STATUS",
+  "WRITTEN-OFF AMOUNT(TOTAL)","WRITTEN-OFF AMOUNT(PRINCIPAL)","SETTLEMENT AMOUNT"
+];
+const NUMERIC_G = new Set([
+  "CREDIT LIMIT","HIGH CREDIT","CURRENT BALANCE","CASH LIMIT","AMOUNT OVERDUE",
+  "EMI","Rate of interest","VALUE OF COLLATERAL",
+  "WRITTEN-OFF AMOUNT(TOTAL)","WRITTEN-OFF AMOUNT(PRINCIPAL)","SETTLEMENT AMOUNT"
+]);
+const labelAltG = [...LABELS_G].sort((a,b) => b.length - a.length)
+  .map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+// Colon is optional: most labels read "Label: value" or "Label :value", but
+// the COLLATERAL/DEFAULT STATUS pair of columns has no colon at all — just
+// "LABEL  value" separated by whitespace (e.g. "SETTLEMENT AMOUNT -").
+const fieldRegexG = new RegExp(`(${labelAltG})\\s*:?\\s*([\\s\\S]*?)(?=(?:${labelAltG})\\s*:?|DAYS PAST DUE|$)`, 'g');
+
+function extractFieldsG(block){
+  const out = {};
+  let m;
+  fieldRegexG.lastIndex = 0;
+  while ((m = fieldRegexG.exec(block)) !== null){
+    const key = m[1].trim();
+    let val = clean(m[2]);
+    if (/^-+$/.test(val)) val = '';
+    if (NUMERIC_G.has(key) && val){
+      const numMatch = val.replace(/Rs\.?/gi,'').replace('₹','').trim().match(/^-?[\d,]+(\.\d+)?/);
+      val = numMatch ? numMatch[0] : val;
+    }
+    if (!(key in out)) out[key] = val;
+  }
+  return out;
+}
+
+function parseFormatG(text){
+  parsedAccounts = [];
+  parsedEnquiries = [];
+
+  // Tell-tale marker for this layout: the "ACCOUNT CONDITION" column header
+  // paired with colon-style "Member Name :" fields — don't misfire on A-F.
+  if (!/ACCOUNT CONDITION/.test(text) || !/Member Name\s*:/.test(text)) return;
+
+  const nameMatch = text.match(/NAME\s+DATE OF BIRTH\s+GENDER\s+([A-Z][A-Z .\/]+?)\s+\d{1,2}-[A-Za-z]{3}-\d{4}/);
+  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+
+  // The CIBIL Score gauge in this layout is a drawn image, not text — it
+  // can't be recovered from the PDF's text layer, so this stays blank.
+  reportMeta.score = '';
+
+  const enqSectionStartIdx = text.search(/\bENQUIRIES\b/);
+  const blockStarts = [];
+  const re = /Member Name\s*:/g;
+  let mm;
+  while ((mm = re.exec(text)) !== null){
+    if (enqSectionStartIdx !== -1 && mm.index >= enqSectionStartIdx) break;
+    blockStarts.push(mm.index);
+  }
+
+  const blocks = blockStarts.map((start, i) => {
+    let end = i + 1 < blockStarts.length ? blockStarts[i+1] : text.length;
+    if (enqSectionStartIdx !== -1 && end > enqSectionStartIdx) end = enqSectionStartIdx;
+    return text.substring(start, end);
+  });
+
+  blocks.forEach((b, i) => {
+    const f = extractFieldsG(b);
+    if (!f.Type && !f['Account Number']) return; // not a real account block
+
+    const closedVal = f.Closed || '';
+    const balanceRaw = f['CURRENT BALANCE'] || '';
+    const balanceNum = balanceRaw === '' ? '' : (parseFloat(balanceRaw.replace(/,/g,'')) || 0);
+    const overdue = f['AMOUNT OVERDUE'] || '';
+    const condition = f['Account Condition'] || '';
+    const overdueNum = overdue ? (parseFloat(overdue.replace(/,/g,'')) || 0) : 0;
+
+    let status = condition || (closedVal ? 'Closed' : 'Active');
+    if (overdueNum > 0) status = (condition || 'Active') + ' — OVERDUE ₹' + overdue;
+
+    parsedAccounts.push({
+      idx: i + 1,
+      type: f.Type || '',
+      ownership: f.Ownership || '',
+      opened: f.Opened || '',
+      closed: closedVal,
+      sanctioned: f['HIGH CREDIT'] || '',
+      balance: balanceRaw, balanceNum,
+      emi: f.EMI || '',
+      limit: [f['CREDIT LIMIT'], f['CASH LIMIT']].filter(Boolean).join(' / '),
+      interest: f['Rate of interest'] || '',
+      tenure: f['EMI Term Month'] || '',
+      status
+    });
+  });
+
+  // Enquiries: "N. LENDER  DD-Mon-YYYY  Purpose" rows under a
+  // "SEQ. MEMBER ENQUIRY DATE ENQUIRY PURPOSE" header — note the date here
+  // is "09-Oct-2023" style (day-Mon-year), unlike formats A/B/F's DD-MM-YYYY.
+  const enqSectionMatch = text.match(/\bENQUIRIES\b[\s\S]*$/);
+  if (enqSectionMatch){
+    const flat = enqSectionMatch[0].replace(/[ \t]*\n[ \t]*/g, ' ');
+    const enqRegex = new RegExp(`\\d+\\.\\s+([A-Z][A-Z0-9 .&\\-]*?)\\s+(\\d{2}-[A-Za-z]{3}-\\d{4})\\s+(${enquiryPurposeAlt})`, 'g');
+    let em;
+    while ((em = enqRegex.exec(flat)) !== null){
+      parsedEnquiries.push({ date: em[2], purpose: clean(em[1]) + ' — ' + clean(em[3]), amount: '' });
+    }
+  }
+
+  const totalMatch = text.match(/ACCOUNT INFORMATION\s*\(TOTAL\s*:\s*(\d+)\)/i);
+  reportMeta.totalAccounts = totalMatch ? totalMatch[1] : String(parsedAccounts.length);
+  reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
+}
+
+// Format H — myscore.cibil.com's "CreditView" Overview/Summary dashboard
+// export (URL fingerprint: .../CreditView/creditreport_newUXP.page). This is
+// a 4-page aggregate-counts summary — Score, Open/Closed account counts,
+// enquiries in the last 3 years — with no per-account table at all, so
+// there's nothing to itemize into loan rows here; that's the source
+// document, not a parsing gap. The one real bug this layout causes: its
+// browser-print draws bold section labels (Name, Score, Address, ...) as
+// several overlapping copies of the same text (a common faux-bold trick),
+// which the PDF's text layer then reads back as that label repeated 2-4
+// times in a row with no separator — e.g. "Name" comes back as
+// "NameNameName". Every match below explicitly consumes any number of
+// repeats of the label before capturing the real value, so it isn't thrown
+// off by exactly how many times a given label happens to repeat.
+// Returns true if this format was recognized (even if a field or two
+// couldn't be matched), so the caller knows not to fall through to the
+// generic scanner and clobber what was found here.
+function parseFormatH(text){
+  parsedAccounts = [];
+  parsedEnquiries = [];
+
+  if (!/creditreport_newUXP|myscore\.cibil\.com\/CreditView/i.test(text)) return false;
+
+  const nameMatch = text.match(/\b(?:Name\s*){1,8}[:\-]?\s*\n?\s*([A-Z][A-Za-z .\/]{2,50}?)\s*\n\s*\b(?:Address\s*){1,8}\b/i);
+  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+
+  const scoreMatch = text.match(/\b(?:Score\s*){1,8}[:\-]?\s*\n?\s*(\d{3})\b/i);
+  reportMeta.score = scoreMatch ? scoreMatch[1] : '';
+
+  const openLoans = text.match(/OPEN\s+ACCOUNTS[\s\S]{0,120}?\bLoans\b\s*\n?\s*(\d+)/i);
+  const closedLoans = text.match(/CLOSED\s+ACCOUNTS[\s\S]{0,120}?\bLoans\b\s*\n?\s*(\d+)/i);
+  const openCards = text.match(/OPEN\s+ACCOUNTS[\s\S]{0,120}?Credit\s*Cards\s*\n?\s*(\d+)/i);
+  const closedCards = text.match(/CLOSED\s+ACCOUNTS[\s\S]{0,120}?Credit\s*Cards\s*\n?\s*(\d+)/i);
+  const totalAccts = [openLoans, closedLoans, openCards, closedCards]
+    .reduce((sum, m) => sum + (m ? parseInt(m[1], 10) : 0), 0);
+  reportMeta.totalAccounts = String(totalAccts);
+  reportMeta.zeroBalance = '';
+
+  // No itemized account or enquiry rows exist in this export — only the
+  // totals above — so parsedAccounts/parsedEnquiries correctly stay empty.
+  // reportMeta.genericFallback is left false since the format IS recognized.
+  return true;
+}
+
 // Format E — generic best-effort scanner for any report we don't have an exact
 // parser for (Experian, Equifax, CRIF High Mark, or an unseen CIBIL layout).
 // This uses loose keyword matching rather than an exact template, so results
@@ -1456,7 +1646,7 @@ function parseFormatE(text){
   const bureauMatch = text.match(/TransUnion\s*CIBIL|Experian|Equifax|CRIF\s*High\s*Mark|High\s*Mark/i);
   reportMeta.bureau = bureauMatch ? bureauMatch[0] : 'Unrecognized bureau';
 
-  const nameMatch = text.match(/\bName\s*[:\-]?\s*([A-Z][A-Za-z .\/]{4,45})/);
+  const nameMatch = text.match(/\b(?:Name\s*){1,8}[:\-]?\s*\n?\s*([A-Z][A-Za-z .\/]{2,45})/i);
   consumerName = nameMatch ? clean(nameMatch[1]) : '';
 
   const scoreMatch = text.match(/Score\D{0,15}(\d{3})\b/i);
