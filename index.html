@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7752263051234280" crossorigin="anonymous"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ScoreDesk — CIBIL to Excel, Powered by SmartRupee</title>
@@ -271,6 +272,17 @@
 </style>
 </head>
 <body>
+
+<!-- Top banner -->
+<ins class="adsbygoogle"
+ style="display:block"
+ data-ad-client="ca-pub-7752263051234280"
+ data-ad-slot="6372712479"
+ data-ad-format="auto"
+ data-full-width-responsive="true"></ins>
+<script>
+ (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
 
 <header class="site">
   <div class="wrap">
@@ -862,6 +874,69 @@ const ENQUIRY_PURPOSES = [
 const enquiryPurposeAlt = [...ENQUIRY_PURPOSES].sort((a,b)=>b.length-a.length)
   .map(p => p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/\s+/g,'\\s+')).join('|');
 
+// Every individual word that appears inside any ENQUIRY_PURPOSES phrase —
+// used by parseWrappedEnquiries below to tell a wrapped PURPOSE fragment
+// apart from a wrapped LENDER NAME fragment when a row spans multiple lines.
+const PURPOSE_WORDS = new Set();
+ENQUIRY_PURPOSES.forEach(p => p.split(/[\s-]+/).forEach(w => w && PURPOSE_WORDS.add(w.toLowerCase())));
+PURPOSE_WORDS.add('-'); PURPOSE_WORDS.add('–'); PURPOSE_WORDS.add('—');
+
+// Recovers enquiry rows from an "Enquiry Information" section where a
+// narrow column width (typical of a phone-screenshot PDF, especially one
+// that's been OCR'd) has wrapped the lender name and/or purpose across
+// several lines — e.g. "ADITYA\nBIRLA F L" for the lender and "Business\nLoan
+// -\nUnsecured" for the purpose, both interleaved with the next row's lender
+// name starting on the line right before the next date. A naive "flatten
+// newlines to spaces then match LENDER DATE PURPOSE" approach breaks here
+// because flattening puts the wrapped lender fragment BETWEEN the purpose
+// words, so the purpose no longer reads as a contiguous phrase.
+// This instead anchors on each date (always intact, DD/MM/YYYY), then
+// classifies every word between two dates as belonging to either the
+// purpose of the row before it or the lender name of the row after it,
+// using CIBIL's fixed purpose vocabulary to tell them apart — because
+// every line in this layout puts the CURRENT row's lender-continuation
+// before its purpose-continuation, and only the very last line before the
+// next date starts the next row's lender name.
+function parseWrappedEnquiries(sectionText){
+  let body = sectionText.replace(/Member Name\s*\n?\s*Date of Enquiry\s*\n?\s*Enquiry Purpose/i, '');
+  const dateRe = /\d{2}[\/\-]\d{2}[\/\-]\d{4}/g;
+  const dates = [];
+  let dm;
+  while ((dm = dateRe.exec(body)) !== null) dates.push({ date: dm[0], start: dm.index, end: dm.index + dm[0].length });
+  if (dates.length === 0) return [];
+
+  const rows = dates.map(d => ({ date: d.date, lenderTokens: [], purposeTokens: [] }));
+
+  function classify(tok, rowIdx){
+    const key = tok.toLowerCase().replace(/[^a-z\-–—]/g, '');
+    if (PURPOSE_WORDS.has(key)) rows[rowIdx].purposeTokens.push(tok);
+    else rows[rowIdx].lenderTokens.push(tok);
+  }
+
+  function processSpan(str, rowIdx, nextRowIdx){
+    const lines = str.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return;
+    for (let li = 0; li < lines.length - 1; li++){
+      lines[li].split(/\s+/).filter(Boolean).forEach(tok => classify(tok, rowIdx));
+    }
+    const lastLine = lines[lines.length - 1].split(/\s+/).filter(Boolean);
+    if (nextRowIdx !== -1) lastLine.forEach(tok => rows[nextRowIdx].lenderTokens.push(tok));
+    else lastLine.forEach(tok => classify(tok, rowIdx));
+  }
+
+  body.substring(0, dates[0].start).split(/\s+/).filter(Boolean).forEach(tok => rows[0].lenderTokens.push(tok));
+  for (let k = 0; k < dates.length - 1; k++){
+    processSpan(body.substring(dates[k].end, dates[k+1].start), k, k + 1);
+  }
+  processSpan(body.substring(dates[dates.length-1].end), dates.length - 1, -1);
+
+  return rows.map(r => ({
+    date: r.date,
+    lender: clean(r.lenderTokens.join(' ')),
+    purpose: clean(r.purposeTokens.join(' ')).replace(/\s+-\s+/g, ' - ')
+  })).filter(r => r.lender && r.purpose);
+}
+
 function extractFields(block){
   const out = {};
   let m;
@@ -1181,6 +1256,18 @@ function parseFormatB(text){
     let em;
     while ((em = enqRegex.exec(flat)) !== null){
       parsedEnquiries.push({ date: em[2], purpose: clean(em[1]) + ' — ' + clean(em[3]), amount: '' });
+    }
+    // The simple flatten-and-match approach above assumes each row's lender
+    // name and purpose sit on one line. When a narrow column has wrapped
+    // them across several lines instead (common in phone-screenshot PDFs,
+    // especially OCR'd ones), flattening interleaves the wrapped lender
+    // fragment between the purpose words, and the match above can silently
+    // catch only a partial, sometimes-wrong subset — there's no reliable
+    // "it clearly failed" signal to gate on, so always compare against the
+    // wrap-aware reconstruction and keep whichever recovers more full rows.
+    const recovered = parseWrappedEnquiries(enqSectionMatch[0]);
+    if (recovered.length > parsedEnquiries.length){
+      parsedEnquiries = recovered.map(r => ({ date: r.date, purpose: r.lender + ' — ' + r.purpose, amount: '' }));
     }
   }
 
@@ -1787,5 +1874,17 @@ downloadBtn.addEventListener('click', async () => {
   XLSX.writeFile(wb, fname);
 });
 </script>
+
+<!-- Bottom banner -->
+<ins class="adsbygoogle"
+ style="display:block"
+ data-ad-client="ca-pub-7752263051234280"
+ data-ad-slot="3038423962"
+ data-ad-format="auto"
+ data-full-width-responsive="true"></ins>
+<script>
+ (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+
 </body>
 </html>
