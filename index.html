@@ -937,6 +937,25 @@ function parseWrappedEnquiries(sectionText){
   })).filter(r => r.lender && r.purpose);
 }
 
+// Recovers enquiry rows from a layout where each enquiry is its own fully
+// labeled block — "Member Name\n{lender}\nDate Of Enquiry\n{date}\nEnquiry
+// Purpose\n{purpose}" — repeated per row, rather than a flat table with one
+// shared header. Seen under an "ENQUIRY DETAILS" heading (as opposed to
+// "Enquiry Information" with a "Member Name / Date of Enquiry / Enquiry
+// Purpose" column header once at the top).
+function parseLabeledEnquiries(sectionText){
+  const re = new RegExp(
+    `Member Name\\s*\\n+\\s*([A-Z][A-Z0-9 .&\\-]+?)\\s*\\n+\\s*Date Of Enquiry\\s*\\n+\\s*(\\d{2}\\/\\d{2}\\/\\d{4})\\s*\\n+\\s*Enquiry Purpose\\s*\\n+\\s*(${enquiryPurposeAlt})`,
+    'gi'
+  );
+  const out = [];
+  let m;
+  while ((m = re.exec(sectionText)) !== null){
+    out.push({ date: m[2], purpose: clean(m[1]) + ' — ' + clean(m[3]), amount: '' });
+  }
+  return out;
+}
+
 function extractFields(block){
   const out = {};
   let m;
@@ -1171,8 +1190,28 @@ function parseFormatB(text){
 
   const nameMatch = text.match(/(?<!Member )\bName\s*:?\s*([A-Z][A-Za-z .\/]+?)\s*(?:\n\s*)?(?:DOB|Date Of Birth)/i);
   consumerName = nameMatch ? clean(nameMatch[1]) : '';
+  if (!consumerName){
+    // Some exports print "Name / DOB / Gender" as a row of labels first,
+    // then the three matching values below as a second row (a table read
+    // column-header-first, values-second) — e.g. "Name\nDOB\nGender\nSHAISTA
+    // ...\n05/05/1986\nFemale". The pattern above expects the value right
+    // after its own label and misses this layout entirely.
+    const colMatch = text.match(/\bName\s*\n+\s*(?:DOB|Date Of Birth)\s*\n+\s*Gender\s*\n+\s*([A-Z][A-Za-z .\/]+?)\s*\n+\s*\d{2}\/\d{2}\/\d{4}\s*\n+\s*(?:Male|Female|Other)\b/i);
+    if (colMatch) consumerName = clean(colMatch[1]);
+  }
 
-  const scoreMatch = text.match(/CIBIL Score is (\d{3})/i) || text.match(/Your CIBIL Score\s*\n*\s*(\d{3})\b/i);
+  let scoreMatch = text.match(/CIBIL Score is (\d{3})/i);
+  if (!scoreMatch){
+    // The score gauge sometimes renders as two separate numbers ("300" and
+    // "900") plus the actual score, and when the score sits immediately
+    // next to the "900" upper-bound label with no gap between them, the
+    // text layer glues them into one run — e.g. "900635" for a score of
+    // 635. Scoped to right after the "Your CIBIL Score" heading so it can't
+    // accidentally match an unrelated "900..." elsewhere in the report.
+    const nearScore = text.match(/Your CIBIL Score[\s\S]{0,150}/i);
+    const glued = nearScore ? nearScore[0].match(/\b900(\d{3})\b/) : null;
+    scoreMatch = glued || text.match(/Your CIBIL Score\s*\n*\s*(\d{3})\b/i);
+  }
   reportMeta.score = scoreMatch ? scoreMatch[1] : '';
 
   // Stop collecting account blocks once the Enquiry Information section
@@ -1181,7 +1220,7 @@ function parseFormatB(text){
   // the last real account's block runs past that heading and swallows it,
   // corrupting whatever field capture was still in progress (typically
   // "Date Closed", which then falsely marks the account Closed).
-  const enqSectionStartIdx = text.search(/Enquiry Information/i);
+  const enqSectionStartIdx = text.search(/Enquiry Information|ENQUIRY DETAILS/i);
   const blockStarts = [];
   const re = /Member Name/g;
   let mm;
@@ -1249,7 +1288,7 @@ function parseFormatB(text){
   // row into one garbled block, so match enquiries independently instead,
   // anchored on CIBIL's fixed enquiry-purpose taxonomy rather than guessing
   // where a free-text lender name ends.
-  const enqSectionMatch = text.match(/Enquiry Information[\s\S]*$/i);
+  const enqSectionMatch = text.match(/(?:Enquiry Information|ENQUIRY DETAILS)[\s\S]*$/i);
   if (enqSectionMatch){
     const flat = enqSectionMatch[0].replace(/[ \t]*\n[ \t]*/g, ' ');
     const enqRegex = new RegExp(`([A-Z][A-Z0-9 .&\\-]*?)\\s+(\\d{2}[\\/\\-]\\d{2}[\\/\\-]\\d{4})\\s+(${enquiryPurposeAlt})`, 'g');
@@ -1268,6 +1307,14 @@ function parseFormatB(text){
     const recovered = parseWrappedEnquiries(enqSectionMatch[0]);
     if (recovered.length > parsedEnquiries.length){
       parsedEnquiries = recovered.map(r => ({ date: r.date, purpose: r.lender + ' — ' + r.purpose, amount: '' }));
+    }
+    // A third layout prints each enquiry as its own fully-labeled block —
+    // "Member Name\n{lender}\nDate Of Enquiry\n{date}\nEnquiry Purpose
+    // \n{purpose}" repeated per row, rather than a flat table (seen under
+    // an "ENQUIRY DETAILS" heading). Try this too and keep it if it wins.
+    const labeled = parseLabeledEnquiries(enqSectionMatch[0]);
+    if (labeled.length > parsedEnquiries.length){
+      parsedEnquiries = labeled;
     }
   }
 
