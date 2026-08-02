@@ -25,9 +25,6 @@
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
-  /* Collapse AdSense slots that fail to fill, so they don't leave blank gaps */
-  ins.adsbygoogle[data-ad-status="unfilled"]{display:none !important;}
-  .wrap:has(> ins.adsbygoogle[data-ad-status="unfilled"]){margin:0 !important; padding:0 !important;}
   body{
     font-family:'Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
     background:var(--paper);
@@ -425,8 +422,8 @@
           <textarea id="revText" required placeholder="How was your experience?"></textarea>
         </div>
         <button class="primary" type="button" id="reviewSendBtn">Post Review</button>
-        <div class="wa-note" id="revWaNote">Thanks! Your review is posted below, and also sent via WhatsApp for moderation.</div>
-        <div class="form-note">Reviews you post appear instantly below on <b>this device</b>, and a copy is sent via WhatsApp so genuine reviews can be verified and featured for every visitor.</div>
+        <div class="wa-note" id="revWaNote">Thanks! Your review is now live on this page for every visitor.</div>
+        <div class="form-note">Reviews post directly to this page and are visible to every visitor right away — no extra step needed.</div>
       </form>
     </div>
 
@@ -449,6 +446,35 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+
+<!-- Firebase — powers the public, shared review board (see script below).
+     Reviews are stored in Firestore so every visitor sees every review
+     instantly, instead of only the reviews saved on their own device. -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
+  import {
+    getFirestore, collection, addDoc, onSnapshot, query, orderBy, limit, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCj9wKwM-L-tzPwBgB_qxeLf3GFsfQTGys",
+    authDomain: "scoredesk-reviews.firebaseapp.com",
+    projectId: "scoredesk-reviews",
+    storageBucket: "scoredesk-reviews.firebasestorage.app",
+    messagingSenderId: "785973627784",
+    appId: "1:785973627784:web:e57ecf888093ad3c1d883d"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Module scripts always run after the page's regular scripts have already
+  // executed, so the main app script (below) attaches a listener for this
+  // event rather than assuming Firebase is ready immediately.
+  window.__reviewsDB = { db, collection, addDoc, onSnapshot, query, orderBy, limit, serverTimestamp };
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
+
 <script>
 /* ============================================================
    TAB NAVIGATION — rolls the panel open/closed instead of an
@@ -524,7 +550,9 @@ document.getElementById('enquirySendBtn').addEventListener('click', () => {
 });
 
 /* ============================================================
-   REVIEWS (stored locally per-device; also relayed via WhatsApp)
+   REVIEWS — public and shared via Firestore. Every review posted
+   here shows up live for every visitor, on any device, without a
+   page refresh. (Firebase setup is the module script above.)
    ============================================================ */
 let selectedStars = 0;
 document.querySelectorAll('#starRow .star').forEach(star => {
@@ -536,23 +564,16 @@ document.querySelectorAll('#starRow .star').forEach(star => {
   });
 });
 
-function loadReviews(){
-  try{
-    return JSON.parse(localStorage.getItem('nt_reviews') || '[]');
-  }catch(e){ return []; }
-}
-function saveReviews(list){
-  try{ localStorage.setItem('nt_reviews', JSON.stringify(list)); }catch(e){}
-}
-
-// A few seed reviews so the tab isn't empty on a brand-new device.
-// Edit or remove these directly in the code whenever you like.
+// A few seed reviews so the tab isn't empty before the first real one
+// comes in. Edit or remove these directly in the code whenever you like.
 const SEED_REVIEWS = [
   { name: "Suresh P.", stars: 5, text: "The CIBIL to Excel tool saved me an hour of manual entry. Very handy.", date: "2026-07-10" }
 ];
 
+let liveReviews = []; // populated live from Firestore once it connects
+
 function renderReviews(){
-  const list = [...SEED_REVIEWS, ...loadReviews()];
+  const list = [...SEED_REVIEWS, ...liveReviews];
   const reviewList = document.getElementById('reviewList');
   const avgNum = document.getElementById('avgNum');
   const avgMeta = document.getElementById('avgMeta');
@@ -568,7 +589,7 @@ function renderReviews(){
   avgNum.textContent = avg.toFixed(1);
   avgMeta.textContent = `BASED ON ${list.length} REVIEW${list.length === 1 ? '' : 'S'}`;
 
-  reviewList.innerHTML = list.slice().reverse().map(r => `
+  reviewList.innerHTML = list.map(r => `
     <div class="review-item">
       <div class="review-top">
         <span class="review-name">${escapeHtml(r.name)}</span>
@@ -586,30 +607,54 @@ function escapeHtml(s){
   return d.innerHTML;
 }
 
-document.getElementById('reviewSendBtn').addEventListener('click', () => {
+// Render the seed review immediately so the tab isn't blank while
+// Firebase connects, then switch to the live feed once it's ready.
+renderReviews();
+
+function initLiveReviews(){
+  const { db, collection, onSnapshot, query, orderBy, limit } = window.__reviewsDB;
+  const q = query(collection(db, 'reviews'), orderBy('timestamp', 'desc'), limit(200));
+  onSnapshot(q, snapshot => {
+    liveReviews = snapshot.docs.map(doc => doc.data());
+    renderReviews();
+  }, err => {
+    console.error('Reviews live-feed error:', err);
+  });
+}
+if (window.__reviewsDB) initLiveReviews();
+else window.addEventListener('firebase-ready', initLiveReviews, { once: true });
+
+document.getElementById('reviewSendBtn').addEventListener('click', async () => {
   const name = document.getElementById('revName').value.trim();
   const text = document.getElementById('revText').value.trim();
   if (!name || !text || selectedStars === 0){
     alert('Please add your name, a star rating, and a short review.');
     return;
   }
-  const entry = { name, stars: selectedStars, text, date: new Date().toISOString().slice(0,10) };
-  const list = loadReviews();
-  list.push(entry);
-  saveReviews(list);
-  renderReviews();
-
-  const waText = `New website review\n\nName: ${name}\nRating: ${selectedStars}/5\nReview: ${text}`;
-  openWhatsApp(waText);
-  document.getElementById('revWaNote').style.display = 'block';
-
-  document.getElementById('revName').value = '';
-  document.getElementById('revText').value = '';
-  selectedStars = 0;
-  document.querySelectorAll('#starRow .star').forEach(s => s.classList.remove('filled'));
+  const btn = document.getElementById('reviewSendBtn');
+  btn.disabled = true;
+  btn.textContent = 'Posting…';
+  try{
+    if (!window.__reviewsDB) throw new Error('Firebase not ready yet');
+    const { db, collection, addDoc, serverTimestamp } = window.__reviewsDB;
+    await addDoc(collection(db, 'reviews'), {
+      name, stars: selectedStars, text,
+      date: new Date().toISOString().slice(0,10),
+      timestamp: serverTimestamp()
+    });
+    document.getElementById('revWaNote').style.display = 'block';
+    document.getElementById('revName').value = '';
+    document.getElementById('revText').value = '';
+    selectedStars = 0;
+    document.querySelectorAll('#starRow .star').forEach(s => s.classList.remove('filled'));
+  }catch(e){
+    console.error('Could not post review:', e);
+    alert("Sorry, couldn't post your review right now — please check your internet connection and try again.");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Post Review';
+  }
 });
-
-renderReviews();
 
 /* ============================================================
    CIBIL PDF -> EXCEL TOOL (unchanged from the standalone version)
