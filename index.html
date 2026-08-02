@@ -25,6 +25,9 @@
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
+  /* Collapse AdSense slots that fail to fill, so they don't leave blank gaps */
+  ins.adsbygoogle[data-ad-status="unfilled"]{display:none !important;}
+  .wrap:has(> ins.adsbygoogle[data-ad-status="unfilled"]){margin:0 !important; padding:0 !important;}
   body{
     font-family:'Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
     background:var(--paper);
