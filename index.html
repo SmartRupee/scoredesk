@@ -63,9 +63,12 @@
   nav.tabs button.active{color:var(--navy); background:#fff; border-color:#fff; box-shadow:var(--shadow);}
 
   main{padding:36px 20px 80px;}
-  .panel{display:none;}
-  .panel.active{display:block; animation:fadeIn 0.25s ease;}
-  @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+  .panel{
+    display:none; overflow:hidden; max-height:0;
+    transition:max-height 0.4s ease, opacity 0.3s ease;
+    opacity:0;
+  }
+  .panel.active{display:block; opacity:1; max-height:none;}
 
   .card{
     background:#fff; border:1px solid var(--line); border-radius:var(--radius);
@@ -218,22 +221,6 @@
     font-size:10.5px; color:#8894A0; border-top:1px solid var(--line); margin-top:10px;
   }
 
-  /* ---------- Ad banner slots ---------- */
-  .ad-banner{
-    background:#F7FBFC; border:1px dashed #A9C6D8; border-radius:var(--radius-sm);
-    padding:16px; margin:20px 0; text-align:center;
-  }
-  .ad-banner .ad-label{
-    font-family:'Courier New',monospace; font-size:9.5px; letter-spacing:1.5px;
-    color:#9AA6B0; text-transform:uppercase; margin-bottom:8px;
-  }
-  .ad-banner .ad-slot{
-    min-height:90px; display:flex; align-items:center; justify-content:center;
-    color:#B7C0C9; font-family:'Courier New',monospace; font-size:12.5px;
-    border:1px solid var(--line); background:#fff; border-radius:var(--radius-sm);
-  }
-  .ad-banner.leaderboard{max-width:1140px;}
-
   /* ================= RESPONSIVE: TABLET & DESKTOP ================= */
   @media (min-width: 720px){
     .brand-row h1{font-size:30px;}
@@ -274,12 +261,14 @@
 <body>
 
 <!-- Top banner -->
-<ins class="adsbygoogle"
- style="display:block"
- data-ad-client="ca-pub-7752263051234280"
- data-ad-slot="6372712479"
- data-ad-format="auto"
- data-full-width-responsive="true"></ins>
+<div class="wrap" style="margin-top:16px;">
+  <ins class="adsbygoogle"
+   style="display:block"
+   data-ad-client="ca-pub-7752263051234280"
+   data-ad-slot="6372712479"
+   data-ad-format="auto"
+   data-full-width-responsive="true"></ins>
+</div>
 <script>
  (adsbygoogle = window.adsbygoogle || []).push({});
 </script>
@@ -301,19 +290,6 @@
 </header>
 
 <main class="wrap">
-
-  <!-- ============ ADVERTISEMENT SLOT — TOP (visible on every tab) ============
-       Replace the placeholder <div class="ad-slot"> below with your ad network's
-       real embed code once you have one (see chat for how Google AdSense etc. work).
-       Example, once you have an AdSense account and this site is approved:
-         <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-XXXXXXXXXX"
-              data-ad-slot="XXXXXXXXXX" data-ad-format="auto" data-full-width-responsive="true"></ins>
-         <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
-  -->
-  <div class="ad-banner leaderboard">
-    <div class="ad-label">Advertisement</div>
-    <div class="ad-slot" id="adSlotTop">Your ad here — 728×90 banner space</div>
-  </div>
 
   <!-- ============ TAB: TOOL ============ -->
   <section class="panel active" id="panel-tool">
@@ -461,12 +437,6 @@
     </div>
   </section>
 
-  <!-- ============ ADVERTISEMENT SLOT — BOTTOM ============ -->
-  <div class="ad-banner leaderboard">
-    <div class="ad-label">Advertisement</div>
-    <div class="ad-slot" id="adSlotBottom">Your ad here — 336×280 or 728×90 space</div>
-  </div>
-
 </main>
 
 <footer class="site">
@@ -478,14 +448,41 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script>
 /* ============================================================
-   TAB NAVIGATION
+   TAB NAVIGATION — rolls the panel open/closed instead of an
+   instant swap. Since each panel's content height is different
+   (and can even change later, e.g. once a report is parsed), the
+   open/close distance is measured live via scrollHeight rather
+   than a fixed guessed value.
    ============================================================ */
+function closePanel(el){
+  el.style.maxHeight = el.scrollHeight + 'px'; // lock in current height first
+  requestAnimationFrame(() => { el.style.maxHeight = '0px'; });
+  el.classList.remove('active');
+  el.addEventListener('transitionend', function onEnd(e){
+    if (e.propertyName !== 'max-height') return;
+    if (!el.classList.contains('active')) el.style.display = 'none';
+    el.removeEventListener('transitionend', onEnd);
+  });
+}
+function openPanel(el){
+  el.style.display = 'block';
+  el.style.maxHeight = '0px';
+  el.classList.add('active');
+  requestAnimationFrame(() => { el.style.maxHeight = el.scrollHeight + 'px'; });
+  el.addEventListener('transitionend', function onEnd(e){
+    if (e.propertyName !== 'max-height') return;
+    if (el.classList.contains('active')) el.style.maxHeight = 'none'; // let it grow freely afterwards
+    el.removeEventListener('transitionend', onEnd);
+  });
+}
 document.querySelectorAll('#tabNav button').forEach(btn => {
   btn.addEventListener('click', () => {
+    const target = document.getElementById('panel-' + btn.dataset.tab);
+    if (target.classList.contains('active')) return;
     document.querySelectorAll('#tabNav button').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
-    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+    document.querySelectorAll('.panel.active').forEach(closePanel);
+    openPanel(target);
   });
 });
 
@@ -1923,12 +1920,14 @@ downloadBtn.addEventListener('click', async () => {
 </script>
 
 <!-- Bottom banner -->
-<ins class="adsbygoogle"
- style="display:block"
- data-ad-client="ca-pub-7752263051234280"
- data-ad-slot="3038423962"
- data-ad-format="auto"
- data-full-width-responsive="true"></ins>
+<div class="wrap" style="margin-bottom:16px;">
+  <ins class="adsbygoogle"
+   style="display:block"
+   data-ad-client="ca-pub-7752263051234280"
+   data-ad-slot="3038423962"
+   data-ad-format="auto"
+   data-full-width-responsive="true"></ins>
+</div>
 <script>
  (adsbygoogle = window.adsbygoogle || []).push({});
 </script>
