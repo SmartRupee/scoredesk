@@ -25,6 +25,9 @@
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
+  /* Collapse AdSense slots that fail to fill, so they don't leave blank gaps */
+  ins.adsbygoogle[data-ad-status="unfilled"]{display:none !important;}
+  .wrap:has(> ins.adsbygoogle[data-ad-status="unfilled"]){margin:0 !important; padding:0 !important;}
   body{
     font-family:'Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
     background:var(--paper);
@@ -116,6 +119,20 @@
   .dot.ok{background:var(--green);} .dot.err{background:var(--red);}
   .privacy{font-family:'Courier New',monospace;font-size:12px;color:#7A8899;margin-top:14px;line-height:1.6;}
 
+  /* ---------- Live score meter (shown while a report is being scanned) ---------- */
+  .live-meter{
+    display:flex; align-items:center; gap:14px; margin-top:14px; padding:12px 16px;
+    border:1px solid var(--line); border-radius:var(--radius-sm); background:#F7FBFC;
+  }
+  .live-meter-gauge{width:62px; flex:0 0 auto;}
+  .live-meter-gauge.pending svg{opacity:.45; animation:liveMeterPulse 1.3s ease-in-out infinite;}
+  @keyframes liveMeterPulse{0%,100%{opacity:.35;} 50%{opacity:.8;}}
+  .live-meter-info{min-width:0;}
+  .live-meter-num{font-size:21px;font-weight:800;color:var(--navy-2);line-height:1.1;}
+  .live-meter-label{font-family:'Courier New',monospace;font-size:11.5px;color:#7A8899;margin-top:3px;}
+  .live-meter-label.ocr{color:#B45309;}
+  .live-meter-label.unavailable{color:var(--red);}
+
   /* ---------- Password prompt ---------- */
   .password-box{
     margin-top:16px; padding:18px; background:#FFF8EC; border:1px solid #EAD9AE; border-radius:var(--radius-sm);
@@ -155,6 +172,54 @@
   .stat{background:#F7FBFC;border:1px solid var(--line);padding:16px;border-radius:var(--radius-sm);}
   .stat .num{font-size:23px;font-weight:800;color:var(--navy-2);}
   .stat .lbl{font-family:'Courier New',monospace;font-size:11px;color:#7A8899;margin-top:4px;text-transform:uppercase;}
+
+  /* ---------- Risk & Score Dashboard ---------- */
+  .risk-dashboard{margin-top:22px; padding-top:22px; border-top:1px dashed var(--line);}
+  .rd-heading{display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:6px; margin-bottom:14px;}
+  .rd-heading h3{margin:0; color:var(--navy); font-size:16.5px;}
+  .rd-heading .rd-sub{font-size:11.5px; color:#7A8899; font-family:'Courier New',monospace;}
+
+  .rd-top{display:flex; gap:24px; align-items:center; flex-wrap:wrap; background:#F7FBFC; border:1px solid var(--line); border-radius:var(--radius); padding:20px; margin-bottom:18px;}
+  .rd-gauge{position:relative; width:170px; height:100px; flex-shrink:0;}
+  .rd-gauge svg{width:100%; height:100%;}
+  .rd-gauge .rd-needle-num{position:absolute; left:0; right:0; bottom:6px; text-align:center; font-size:30px; font-weight:800; color:var(--navy);}
+  .rd-gauge .rd-band{position:absolute; left:0; right:0; bottom:-18px; text-align:center; font-size:12px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;}
+  .rd-scale{display:flex; justify-content:space-between; width:170px; font-family:'Courier New',monospace; font-size:10.5px; color:#9AAAB8; margin-top:-4px;}
+  .rd-applicant{flex:1; min-width:180px;}
+  .rd-applicant .rd-name{font-size:17px; font-weight:800; color:var(--navy);}
+  .rd-applicant .rd-tag{display:inline-block; font-size:10.5px; font-family:'Courier New',monospace; text-transform:uppercase; background:#E7F3F1; color:var(--teal-2); border-radius:6px; padding:3px 8px; margin-top:6px; margin-right:6px;}
+
+  .rd-metric-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px; margin-bottom:18px;}
+  .rd-metric{background:#fff; border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px;}
+  .rd-metric .rd-m-lbl{font-family:'Courier New',monospace; font-size:10.5px; color:#7A8899; text-transform:uppercase; margin-bottom:6px;}
+  .rd-metric .rd-m-val{font-size:19px; font-weight:800; color:var(--navy-2); margin-bottom:8px;}
+  .rd-bar-track{height:6px; background:#EDF2F5; border-radius:4px; overflow:hidden; margin-bottom:8px;}
+  .rd-bar-fill{height:100%; border-radius:4px;}
+  .rd-band-pill{display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; padding:3px 9px; border-radius:20px; color:#fff;}
+
+  .rd-flags{margin-top:6px;}
+  .rd-flags-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .rd-flags-head h4{margin:0; font-size:13.5px; color:var(--navy);}
+  .rd-flag-count{font-family:'Courier New',monospace; font-size:11px; padding:4px 10px; border-radius:20px; background:#FEE2E2; color:#B91C1C;}
+  .rd-flag-count.rd-clean{background:#DCFCE7; color:#166534;}
+  .rd-flag-item{display:flex; gap:12px; padding:12px 4px; border-bottom:1px solid var(--line);}
+  .rd-flag-item:last-child{border-bottom:none;}
+  .rd-sev{flex-shrink:0; width:52px; text-align:center; font-size:10px; font-weight:800; letter-spacing:0.4px; padding:3px 0; border-radius:5px; align-self:flex-start; margin-top:2px;}
+  .rd-sev.HIGH{background:#FEE2E2; color:#B91C1C;}
+  .rd-sev.MED{background:#FEF3C7; color:#92400E;}
+  .rd-sev.LOW{background:#EDF2F5; color:#5B7A99;}
+  .rd-flag-title{font-weight:700; color:var(--ink); font-size:13.5px;}
+  .rd-flag-detail{font-size:12.5px; color:#5B7A99; margin-top:2px;}
+  .rd-disclaimer{margin-top:14px; font-size:11.5px; color:#9AAAB8; line-height:1.5;}
+
+  /* ---------- FAQ ---------- */
+  .faq-item{border-bottom:1px solid var(--line); padding:14px 0;}
+  .faq-item:last-child{border-bottom:none;}
+  .faq-item summary{cursor:pointer; font-weight:700; color:var(--navy-2); font-size:14.5px; list-style:none; display:flex; justify-content:space-between; align-items:center;}
+  .faq-item summary::-webkit-details-marker{display:none;}
+  .faq-item summary::after{content:'+'; font-size:20px; color:var(--teal); font-weight:400; margin-left:12px;}
+  .faq-item[open] summary::after{content:'−';}
+  .faq-item p{margin:10px 0 0; font-size:13.5px; color:#455266; line-height:1.55;}
   .table-wrap{max-height:420px;overflow:auto;border:1px solid var(--line);margin-top:10px;border-radius:var(--radius-sm);}
   .empty-hint{font-family:'Courier New',monospace;font-size:12px;color:#B84040;margin-top:10px;}
 
@@ -307,6 +372,14 @@
       </div>
       <div class="magic-text" id="magicText" style="display:none;">✨ Wait for the magic to happen ✨</div>
 
+      <div class="live-meter" id="liveScoreMeter" style="display:none;">
+        <div class="live-meter-gauge" id="liveMeterGauge"></div>
+        <div class="live-meter-info">
+          <div class="live-meter-num" id="liveMeterNum">—</div>
+          <div class="live-meter-label" id="liveMeterLabel">Waiting for score…</div>
+        </div>
+      </div>
+
       <div class="password-box" id="passwordBox" style="display:none;">
         <label for="pdfPasswordInput">This PDF is password protected — enter its password to unlock it</label>
         <div class="password-row">
@@ -323,9 +396,13 @@
     <div class="card" id="resultsCard" style="display:none;">
       <h2>Step 2 — Review what was found</h2>
       <div class="stat-grid" id="statGrid"></div>
+      <div id="riskDashboard" class="risk-dashboard" style="display:none;"></div>
       <div id="emptyHint" class="empty-hint" style="display:none;">Some fields couldn't be auto-detected — this can happen if the PDF was scanned as an image rather than text. Check the preview table below and correct anything odd directly in the downloaded Excel file.</div>
       <div id="genericWarning" class="password-box" style="display:none; background:#FFF8EC; border-color:#EAD9AE;">
         ⚠️ <b>This report's layout wasn't fully recognized</b> — it may be from a bureau other than TransUnion CIBIL, or a format we haven't calibrated yet. The numbers below are a best-effort extraction: please double-check them carefully against the original PDF before relying on them, and consider sharing a sample (with sensitive details blacked out) so full support can be added.
+      </div>
+      <div id="scoreImageNote" class="password-box" style="display:none; background:#EEF6FF; border-color:#BFDBFE;">
+        ℹ️ <b>CIBIL Score not shown above</b> — in this report layout, the score is a drawn dial/gauge picture, not text, so it can't be read reliably from the file (a picture of a "6" and "9" digit can easily be misread as an "8"). Please check the number on <b>page 1 of the PDF</b> directly. Everything else (accounts, EMIs, balances, enquiries) is read from real text and is not affected.
       </div>
       <div class="table-wrap">
         <table id="loanTable">
@@ -376,9 +453,41 @@
         </div>
       </div>
     </div>
-  </section>
 
-  <!-- ============ TAB: SUPPORT ============ -->
+    <!-- FAQ -->
+    <div class="card" id="faqCard">
+      <h2>Frequently Asked Questions</h2>
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary>What does ScoreDesk actually do?</summary>
+          <p>ScoreDesk reads a CIBIL (or other bureau) credit report PDF and turns the account table, EMIs, balances, and enquiries into a clean Excel file — plus a quick on-screen Risk &amp; Score Dashboard. It's a document-reading and analysis tool, not a bureau or lender.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Is my report uploaded anywhere?</summary>
+          <p>No. The PDF is read entirely inside your own browser using JavaScript — nothing is ever sent to a server. Closing the tab discards everything. This is different from most CIBIL-parsing tools, which upload your file to their servers for processing.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Do you pull my score directly from CIBIL, like a bureau API?</summary>
+          <p>No — ScoreDesk only reads the PDF report you upload yourself; it doesn't connect to TransUnion CIBIL, Experian, Equifax, or CRIF's live systems, and there's no bureau partnership or API behind it. If you already have a report (downloaded from the CIBIL portal, your bank, or a DSA), ScoreDesk just extracts what's already on the page.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Which report formats are supported?</summary>
+          <p>Several common TransUnion CIBIL layouts (self-pull, bank-pull, DSA-pull variants) are supported, plus a best-effort reader for Experian and other bureau exports. If a layout isn't recognized, ScoreDesk falls back to a generic scan and flags the result so you know to double-check it.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Why is my CIBIL Score sometimes not shown?</summary>
+          <p>In a few report layouts, the score is a drawn dial/gauge picture rather than real text in the PDF. Since a picture of "690" can be misread by software as "698", ScoreDesk deliberately doesn't guess at it — it tells you to check page 1 of the PDF directly instead of risking a wrong number.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Is the Risk &amp; Score Dashboard an official bureau score?</summary>
+          <p>No. The repayment history, credit utilization, credit age, enquiry frequency, and credit mix bands are ScoreDesk's own heuristic read of the data already in your report — a quick-glance guide, not TransUnion CIBIL's or any bureau's official scoring methodology. Always verify important decisions against the original PDF.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Is this free, and why do you show ads / ask for donations?</summary>
+          <p>Yes, the tool itself is completely free with no sign-up. SmartRupee is self-funded, so a small AdSense banner and an optional UPI donation help keep it running — neither affects how your report is read, since everything happens locally in your browser either way.</p>
+        </details>
+      </div>
+    </div>
   <section class="panel" id="panel-support">
     <div class="card">
       <h2>Support This Work</h2>
@@ -667,10 +776,12 @@ const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const resultsCard = document.getElementById('resultsCard');
 const statGrid = document.getElementById('statGrid');
+const riskDashboard = document.getElementById('riskDashboard');
 const loanTableBody = document.querySelector('#loanTable tbody');
 const downloadBtn = document.getElementById('downloadBtn');
 const emptyHint = document.getElementById('emptyHint');
 const genericWarning = document.getElementById('genericWarning');
+const scoreImageNote = document.getElementById('scoreImageNote');
 const passwordBox = document.getElementById('passwordBox');
 const pdfPasswordInput = document.getElementById('pdfPasswordInput');
 const pdfPasswordSubmit = document.getElementById('pdfPasswordSubmit');
@@ -679,6 +790,10 @@ const readyBanner = document.getElementById('readyBanner');
 const progressTrack = document.getElementById('progressTrack');
 const progressFill = document.getElementById('progressFill');
 const magicText = document.getElementById('magicText');
+const liveScoreMeter = document.getElementById('liveScoreMeter');
+const liveMeterGauge = document.getElementById('liveMeterGauge');
+const liveMeterNum = document.getElementById('liveMeterNum');
+const liveMeterLabel = document.getElementById('liveMeterLabel');
 
 let parsedAccounts = [];
 let parsedEnquiries = [];
@@ -727,6 +842,42 @@ function stopProgress(success){
     progressTrack.style.display = 'none';
     magicText.style.display = 'none';
   }
+}
+
+// Small live gauge shown in Step 1 while a report is being scanned — gives
+// an at-a-glance read on the CIBIL Score before the full results/dashboard
+// in Step 2 exist yet. Reuses gaugeSvg() (defined further down) so the
+// needle position always matches the final Risk & Score Dashboard gauge.
+function showLiveMeter(state, pageNum, score){
+  liveScoreMeter.style.display = 'flex';
+  if (state === 'pending'){
+    liveMeterGauge.className = 'live-meter-gauge pending';
+    liveMeterGauge.innerHTML = gaugeSvg(600);
+    liveMeterNum.textContent = '…';
+    liveMeterLabel.className = 'live-meter-label';
+    liveMeterLabel.textContent = pageNum ? `Reading score gauge on page ${pageNum}…` : 'Reading CIBIL Score…';
+  } else if (state === 'ocr'){
+    liveMeterGauge.className = 'live-meter-gauge';
+    liveMeterGauge.innerHTML = gaugeSvg(parseInt(score, 10));
+    liveMeterNum.textContent = score;
+    liveMeterLabel.className = 'live-meter-label ocr';
+    liveMeterLabel.textContent = `Read from the score image on page ${pageNum} — please confirm visually`;
+  } else if (state === 'text'){
+    liveMeterGauge.className = 'live-meter-gauge';
+    liveMeterGauge.innerHTML = gaugeSvg(parseInt(score, 10));
+    liveMeterNum.textContent = score;
+    liveMeterLabel.className = 'live-meter-label';
+    liveMeterLabel.textContent = 'Read directly from the report text';
+  } else {
+    liveMeterGauge.className = 'live-meter-gauge';
+    liveMeterGauge.innerHTML = gaugeSvg(300);
+    liveMeterNum.textContent = '—';
+    liveMeterLabel.className = 'live-meter-label unavailable';
+    liveMeterLabel.textContent = pageNum ? `Couldn't read the score image — see page ${pageNum}` : 'Score not found in this report';
+  }
+}
+function hideLiveMeter(){
+  liveScoreMeter.style.display = 'none';
 }
 
 function hidePasswordPrompt(){
@@ -791,6 +942,120 @@ async function ocrPage(page){
   return text;
 }
 
+// Finds which PDF page actually has the CIBIL Score section, so the gauge
+// OCR (below) targets the right page instead of assuming page 1. Works for
+// ANY layout — known or future — because it just looks for the heading
+// text, not a specific format's structure.
+function findScorePageNumber(pageTexts){
+  for (let i = 0; i < pageTexts.length; i++){
+    if (/\bCIBIL\s*SCORE\b|\bCREDIT\s*SCORE\b|\bYOUR\s*SCORE\b/i.test(pageTexts[i])) return i + 1;
+  }
+  return null;
+}
+
+// Reads the CIBIL Score off a drawn gauge/dial image using the page's own
+// rendering — works across ANY report layout, present or future, that
+// draws the score as "300 <SCORE> 900" flanking the needle. CIBIL's score
+// range is fixed at 300–900, so those two numbers are a reliable anchor
+// regardless of the exact gauge artwork or where it sits on the page.
+//
+// Two-pass strategy:
+//  1. OCR the full page normally and locate the "300" and "900" words via
+//     their bounding boxes.
+//  2. Re-OCR just the tight strip of pixels between them with a
+//     digits-only whitelist, which is far more accurate for a single
+//     number than reading the whole page — this directly targets the
+//     misread risk (e.g. "690" vs "698") that a full-page/general OCR
+//     pass is prone to on this kind of blocky gauge font.
+// Falls back to a looser page-text scan near a "SCORE" heading if no
+// clean 300/900 anchor pair is found (a differently-drawn gauge style).
+async function extractScoreViaOCR(page, onStatus){
+  const viewport = page.getViewport({ scale: 3 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  const worker = await getOcrWorker();
+  onStatus && onStatus('Locating score gauge…');
+  const { data } = await worker.recognize(canvas);
+  const words = data.words || [];
+
+  const norm = s => (s || '').replace(/[oO]/g, '0').replace(/\s+/g, '');
+  const w300 = words.filter(w => norm(w.text) === '300');
+  const w900 = words.filter(w => norm(w.text) === '900');
+
+  let anchorPair = null;
+  outer:
+  for (const a of w300){
+    for (const b of w900){
+      const rowH = Math.max(1, a.bbox.y1 - a.bbox.y0);
+      const sameLine = Math.abs(a.bbox.y0 - b.bbox.y0) < rowH * 1.6;
+      if (sameLine && b.bbox.x0 > a.bbox.x1){
+        anchorPair = { left: a, right: b };
+        break outer;
+      }
+    }
+  }
+
+  if (anchorPair){
+    onStatus && onStatus('Reading score digits…');
+    const gapW = anchorPair.right.bbox.x0 - anchorPair.left.bbox.x1;
+    const pad = Math.max(2, gapW * 0.05);
+    const x0 = Math.max(0, anchorPair.left.bbox.x1 + pad);
+    const x1 = Math.min(canvas.width, anchorPair.right.bbox.x0 - pad);
+    const rowH = Math.max(1, anchorPair.left.bbox.y1 - anchorPair.left.bbox.y0);
+    const yMid = (anchorPair.left.bbox.y0 + anchorPair.left.bbox.y1) / 2;
+    const y0 = Math.max(0, yMid - rowH * 2.5);
+    const y1 = Math.min(canvas.height, yMid + rowH * 2.5);
+    const cropW = Math.max(1, Math.round(x1 - x0));
+    const cropH = Math.max(1, Math.round(y1 - y0));
+
+    if (cropW > 4 && cropH > 4){
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = cropW;
+      cropCanvas.height = cropH;
+      cropCanvas.getContext('2d').drawImage(canvas, x0, y0, cropW, cropH, 0, 0, cropW, cropH);
+
+      let cropData;
+      try{
+        await worker.setParameters({ tessedit_char_whitelist: '0123456789' });
+        const res = await worker.recognize(cropCanvas);
+        cropData = res.data;
+      } finally {
+        await worker.setParameters({ tessedit_char_whitelist: '' });
+      }
+
+      const digitMatch = (cropData.text || '').match(/\d{3}/);
+      if (digitMatch){
+        const n = parseInt(digitMatch[0], 10);
+        if (n >= 300 && n <= 900){
+          return { score: String(n), confidence: cropData.confidence, method: 'anchor' };
+        }
+      }
+    }
+  }
+
+  // Fallback: no clean 300/900 anchor pair found (a differently-drawn
+  // gauge) — scan the full-page OCR text near a "SCORE" heading for a
+  // plausible 3-digit number, excluding the scale endpoints themselves.
+  const text = data.text || '';
+  const nearScore = text.match(/(?:CIBIL\s*)?SCORE[\s\S]{0,150}/i);
+  if (nearScore){
+    const nums = nearScore[0].match(/\b\d{3}\b/g) || [];
+    const candidate = nums.find(n => n !== '300' && n !== '900');
+    if (candidate){
+      const n = parseInt(candidate, 10);
+      if (n >= 300 && n <= 900){
+        return { score: String(n), confidence: null, method: 'fallback' };
+      }
+    }
+  }
+
+  return null;
+}
+
 // Some PDFs (especially ones with kerning-adjusted fonts, common in
 // professionally-designed consumer reports) get their text broken into
 // oddly-fragmented pieces by pdf.js — e.g. "Account" arrives as two
@@ -840,16 +1105,19 @@ async function handleFile(file){
   loanTableBody.innerHTML = '';
   statGrid.innerHTML = '';
   hidePasswordPrompt();
+  hideLiveMeter();
   startProgress();
   try{
     const buf = await file.arrayBuffer();
     const pdf = await loadPdfWithPassword(buf);
     let fullText = '';
     let scannedPageCount = 0;
+    const pageTexts = []; // pageTexts[i-1] = page i's text — used below to
+                           // locate which page actually has the score gauge.
     for (let i = 1; i <= pdf.numPages; i++){
       if (requestId !== currentRequestId) return; // superseded by a newer upload
       setStatus(`Extracting text — page ${i} of ${pdf.numPages}…`);
-      updateProgress((i - 1) / pdf.numPages * 0.85);
+      updateProgress((i - 1) / pdf.numPages * 0.80);
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
       let pageText = itemsToText(content.items);
@@ -865,22 +1133,64 @@ async function handleFile(file){
           console.warn('OCR failed on page', i, ocrErr);
         }
       }
+      pageTexts.push(pageText);
       fullText += pageText + '\n';
     }
     if (requestId !== currentRequestId) return; // superseded by a newer upload
     setStatus('Parsing loan accounts…');
-    updateProgress(0.92);
+    updateProgress(0.88);
     parseReport(fullText);
+
+    // Score gauge OCR fallback — applies to ANY format/layout, not just
+    // ones ScoreDesk has an exact parser for: parseReport() flags
+    // reportMeta.scoreIsImage whenever a CIBIL/credit score heading exists
+    // in the text but no parser found the number as real text (i.e. the
+    // score is a drawn gauge picture). This is what makes score recovery
+    // automatic for unrecognized/future layouts too — no new parser code
+    // needed, just this one downstream step.
+    if (reportMeta.scoreIsImage && !reportMeta.score){
+      const targetPageNum = findScorePageNumber(pageTexts) || 1;
+      reportMeta.scorePageNum = targetPageNum;
+      showLiveMeter('pending', targetPageNum);
+      updateProgress(0.90);
+      try{
+        setStatus(`Reading CIBIL Score from page ${targetPageNum} (image)…`);
+        const scorePage = await pdf.getPage(targetPageNum);
+        const ocrResult = await extractScoreViaOCR(scorePage, s => setStatus(s));
+        if (requestId !== currentRequestId) return; // superseded by a newer upload
+        if (ocrResult){
+          reportMeta.score = ocrResult.score;
+          reportMeta.scoreSource = 'ocr';
+          reportMeta.scoreOcrConfidence = ocrResult.confidence;
+          showLiveMeter('ocr', targetPageNum, ocrResult.score);
+        } else {
+          reportMeta.scoreSource = 'unavailable';
+          showLiveMeter('unavailable', targetPageNum);
+        }
+      }catch(scoreErr){
+        console.warn('Score OCR failed', scoreErr);
+        reportMeta.scoreSource = 'unavailable';
+        showLiveMeter('unavailable', targetPageNum);
+      }
+    } else if (reportMeta.score){
+      reportMeta.scoreSource = 'text';
+    }
+
+    updateProgress(0.97);
     renderResults();
     const scannedNote = scannedPageCount > 0 ? ` (${scannedPageCount} scanned page${scannedPageCount===1?'':'s'} read via OCR)` : '';
     setStatus(`Done — found ${parsedAccounts.length} accounts and ${parsedEnquiries.length} enquiries.${scannedNote}`, 'ok');
     readyBanner.style.display = 'block';
     stopProgress(true);
+    // The full Risk & Score Dashboard below now shows the same gauge with
+    // more context, so fade the compact Step-1 meter out once results land.
+    setTimeout(hideLiveMeter, 1400);
   }catch(err){
     if (requestId !== currentRequestId) return; // superseded by a newer upload
     console.error(err);
     setStatus('Could not read this PDF. It may be a scanned image rather than a text PDF.', 'err');
     stopProgress(false);
+    hideLiveMeter();
   }
 }
 
@@ -1017,8 +1327,49 @@ function extractFields(block){
   return out;
 }
 
+// Extracts the date the bureau report was generated (e.g. "Date: 26 December,
+// 2023, 5:02 PM" or "26-12-2023"). Every dashboard calculation below (credit
+// age, recent-enquiry count) is relative to THIS date, not today's — a report
+// pulled in 2023 shouldn't show "0 enquiries in the last 6 months" just
+// because it's 2026 now. Falls back to today's date if nothing is found,
+// flagging that fallback so the UI can note the numbers are approximate.
+function extractReportDate(text){
+  let m = text.match(/Date:\s*(\d{1,2})\s+([A-Za-z]+),?\s+(\d{4})/);
+  if (m){
+    const d = new Date(`${m[2]} ${m[1]}, ${m[3]}`);
+    if (!isNaN(d)) return d;
+  }
+  m = text.match(/\b(\d{2})[\/\-](\d{2})[\/\-](\d{4})\b/);
+  if (m){
+    const d = new Date(+m[3], +m[2]-1, +m[1]);
+    if (!isNaN(d)) return d;
+  }
+  return null;
+}
+
+// Flexible date parser for the many small date formats seen across bureau
+// layouts: "20-Mar-2017", "20/03/2017", "20-03-2017", "2017-03-20".
+function parseFlexDate(str){
+  if (!str) return null;
+  str = String(str).trim();
+  let m = str.match(/^(\d{1,2})[-\/]([A-Za-z]{3,9})[-\/](\d{4})$/);
+  if (m){ const d = new Date(`${m[2]} ${m[1]}, ${m[3]}`); if (!isNaN(d)) return d; }
+  m = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+  if (m){ const d = new Date(+m[3], +m[2]-1, +m[1]); if (!isNaN(d)) return d; }
+  m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m){ const d = new Date(+m[1], +m[2]-1, +m[3]); if (!isNaN(d)) return d; }
+  return null;
+}
+
 function parseReport(text){
   reportMeta.genericFallback = false;
+  reportMeta.scoreIsImage = false;
+  reportMeta.scoreSource = null;
+  reportMeta.scoreOcrConfidence = null;
+  reportMeta.scorePageNum = null;
+  const foundDate = extractReportDate(text);
+  reportMeta.reportDate = foundDate || new Date();
+  reportMeta.reportDateIsFallback = !foundDate;
   parseFormatA(text);
   // Format A (lender/bureau "Consumer CIR" layout) found nothing — this may be
   // CIBIL's other common layout: the consumer self-check "CIBIL Score & Report"
@@ -1073,6 +1424,18 @@ function parseReport(text){
   // best-effort keyword scanner rather than showing nothing at all.
   if (parsedAccounts.length === 0 && !formatHMatched){
     parseFormatE(text);
+  }
+
+  // Generic, format-agnostic score check — runs regardless of which parser
+  // (if any) matched above. Whenever the report clearly has a CIBIL/credit
+  // score section but no parser recovered the number as real text, treat
+  // it as "the score is a drawn gauge image" so handleFile()'s OCR fallback
+  // kicks in and the UI shows an accurate caveat instead of silently
+  // showing nothing. This is what makes score recovery automatic for any
+  // unrecognized or future report layout — new format parsers don't need
+  // to remember to set reportMeta.scoreIsImage themselves.
+  if (!reportMeta.score){
+    reportMeta.scoreIsImage = /\b(?:CIBIL|CREDIT|BUREAU)?\s*SCORE\b/i.test(text);
   }
 }
 
@@ -1704,8 +2067,12 @@ function parseFormatG(text){
   consumerName = nameMatch ? clean(nameMatch[1]) : '';
 
   // The CIBIL Score gauge in this layout is a drawn image, not text — it
-  // can't be recovered from the PDF's text layer, so this stays blank.
+  // can't be reliably recovered from the PDF's text layer (OCR on this
+  // dial's blocky digit font confuses e.g. 690 with 698 more often than
+  // not, which is worse than showing nothing for a number used in credit
+  // decisions), so this stays blank and the UI explains why instead.
   reportMeta.score = '';
+  reportMeta.scoreIsImage = true;
 
   const enqSectionStartIdx = text.search(/\bENQUIRIES\b/);
   const blockStarts = [];
@@ -1873,17 +2240,255 @@ function parseFormatE(text){
   reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
 }
 
+// ============ Risk & Score Dashboard ============
+// Everything here is computed client-side from data the parsers above
+// already extracted — no new parsing, no server calls. Bands mirror the
+// standard 5-tier scale (Poor / Fair / Good / Very Good / Excellent) used
+// across the industry for score breakdowns, but these are ScoreDesk's own
+// heuristic reading of the report, not an official bureau methodology —
+// see the disclaimer rendered with the dashboard.
+
+const BAND_LABELS = ['Poor','Fair','Good','Very Good','Excellent'];
+const BAND_COLORS = {'Poor':'#DC2626','Fair':'#F59E0B','Good':'#84CC16','Very Good':'#16A34A','Excellent':'#0B7A6E'};
+
+// breakpoints has 4 ascending values splitting the 5 bands. If `inverse` is
+// true, a LOWER value is better (e.g. utilization, enquiry count).
+function bandOf(value, breakpoints, inverse){
+  if (value === null || value === undefined || isNaN(value)) return null;
+  const order = inverse ? [...breakpoints].reverse().map(b => -b) : breakpoints;
+  const v = inverse ? -value : value;
+  for (let i=0;i<order.length;i++){ if (v < order[i]) return BAND_LABELS[i]; }
+  return BAND_LABELS[4];
+}
+
+function simplifyAccountType(t){
+  t = (t||'').toLowerCase();
+  if (!t) return null;
+  if (/credit card/.test(t)) return 'Credit Card';
+  if (/home|housing|property/.test(t)) return 'Home/Property Loan';
+  if (/auto|vehicle|two-wheeler|car/.test(t)) return 'Vehicle Loan';
+  if (/personal/.test(t)) return 'Personal Loan';
+  if (/business|professional/.test(t)) return 'Business Loan';
+  if (/gold/.test(t)) return 'Gold Loan';
+  if (/consumer/.test(t)) return 'Consumer Loan';
+  if (/overdraft/.test(t)) return 'Overdraft';
+  return 'Other';
+}
+
+function overdueAmtFromStatus(status){
+  const m = (status||'').match(/OVERDUE ₹([\d,]+)/);
+  return m ? (parseFloat(m[1].replace(/,/g,'')) || 0) : 0;
+}
+
+function computeDashboard(){
+  const asOf = reportMeta.reportDate || new Date();
+  const total = parsedAccounts.length;
+  if (!total) return null;
+
+  const activeAccounts = parsedAccounts.filter(a => a.status.startsWith('Active') || /overdue/i.test(a.status));
+
+  // Repayment history: % of accounts with no current overdue flag.
+  const overdueAccounts = parsedAccounts.filter(a => a.status.includes('OVERDUE'));
+  const repaymentPct = Math.round(100 * (total - overdueAccounts.length) / total);
+
+  // Credit utilization: revolving accounts (cards/overdrafts) only — a term
+  // loan's "balance vs sanctioned amount" isn't a utilization ratio.
+  const revolving = parsedAccounts.filter(a => /credit card|overdraft/i.test(a.type));
+  let utilizationPct = null;
+  if (revolving.length){
+    const limitOf = a => {
+      const raw = (a.limit || a.sanctioned || '').toString().split('/')[0];
+      const n = parseFloat(raw.replace(/,/g,''));
+      return isNaN(n) ? 0 : n;
+    };
+    const totalLimit = revolving.reduce((s,a) => s + limitOf(a), 0);
+    const totalBal = revolving.reduce((s,a) => s + (a.balanceNum || 0), 0);
+    if (totalLimit > 0) utilizationPct = Math.round(100 * totalBal / totalLimit);
+  }
+
+  // Credit age: years since the oldest account was opened, as of the
+  // report's own date (not today's) — see extractReportDate above.
+  const openedDates = parsedAccounts.map(a => parseFlexDate(a.opened)).filter(Boolean);
+  const creditAgeYears = openedDates.length
+    ? (asOf - Math.min(...openedDates)) / (365.25*24*3600*1000)
+    : null;
+
+  // Enquiry frequency: hard enquiries in the 6 months before the report date.
+  const enqDates = parsedEnquiries.map(e => parseFlexDate(e.date)).filter(Boolean);
+  const sixMoAgo = new Date(asOf); sixMoAgo.setMonth(sixMoAgo.getMonth()-6);
+  const enqRecent = enqDates.filter(d => d >= sixMoAgo && d <= asOf).length;
+
+  // Credit mix: how many distinct simplified loan/card categories are on file.
+  const mixSet = new Set(parsedAccounts.map(a => simplifyAccountType(a.type)).filter(Boolean));
+
+  // ---- Risk flags ----
+  const flags = [];
+  const totalOutstanding = activeAccounts.reduce((s,a) => s + (a.balanceNum || 0), 0);
+  const totalOverdueAmt = activeAccounts.reduce((s,a) => s + overdueAmtFromStatus(a.status), 0);
+  if (totalOutstanding > 0 && totalOverdueAmt > 0){
+    const ratio = 100 * totalOverdueAmt / totalOutstanding;
+    if (ratio >= 15) flags.push({sev:'HIGH', title:`Overdue ≥ 15% of outstanding`, detail:`₹${Math.round(totalOverdueAmt).toLocaleString('en-IN')} overdue on ₹${Math.round(totalOutstanding).toLocaleString('en-IN')} outstanding (${Math.round(ratio)}%).`});
+    else if (ratio >= 5) flags.push({sev:'MED', title:`Overdue ${Math.round(ratio)}% of outstanding`, detail:`₹${Math.round(totalOverdueAmt).toLocaleString('en-IN')} overdue on ₹${Math.round(totalOutstanding).toLocaleString('en-IN')} outstanding.`});
+  }
+  if (overdueAccounts.length){
+    flags.push({
+      sev: overdueAccounts.length >= 3 ? 'HIGH' : 'MED',
+      title: `${overdueAccounts.length} account(s) currently overdue`,
+      detail: overdueAccounts.slice(0,4).map(a => a.type || 'Account').join(', ') + (overdueAccounts.length > 4 ? ', …' : '') + '. Full month-by-month DPD trend isn\'t extracted yet — check the PDF for the delinquency pattern.'
+    });
+  }
+  if (utilizationPct !== null && utilizationPct >= 50){
+    flags.push({sev: utilizationPct >= 90 ? 'HIGH':'MED', title:`Credit utilization ${utilizationPct}%`, detail:`${revolving.length} revolving account(s) (cards/overdrafts) counted.`});
+  }
+  if (enqRecent >= 1){
+    flags.push({sev: enqRecent >= 8 ? 'HIGH' : (enqRecent >= 4 ? 'MED' : 'LOW'), title:`${enqRecent} enquir${enqRecent===1?'y':'ies'} in last 6 months`, detail:`Measured from the report's own date, ${asOf.toLocaleDateString('en-IN')}.`});
+  }
+  const badAccounts = parsedAccounts.filter(a => /written-off|settled/i.test(a.status));
+  if (badAccounts.length){
+    const hasWriteOff = badAccounts.some(a => /written-off/i.test(a.status));
+    flags.push({sev: hasWriteOff ? 'HIGH':'MED', title:`${badAccounts.length} written-off/settled account(s) on file`, detail: badAccounts.slice(0,4).map(a => a.type || 'Account').join(', ') + (badAccounts.length > 4 ? ', …' : '')});
+  }
+
+  return {
+    asOf, total, repaymentPct, utilizationPct, creditAgeYears, enqRecent,
+    creditMixCount: mixSet.size, flags
+  };
+}
+
+function metricCardHtml(label, valueText, band){
+  const color = band ? BAND_COLORS[band] : '#C7D2DA';
+  const pct = band ? (BAND_LABELS.indexOf(band)+1) * 20 : 0;
+  return `
+    <div class="rd-metric">
+      <div class="rd-m-lbl">${label}</div>
+      <div class="rd-m-val">${valueText}</div>
+      <div class="rd-bar-track"><div class="rd-bar-fill" style="width:${pct}%; background:${color};"></div></div>
+      ${band ? `<span class="rd-band-pill" style="background:${color};">${band}</span>` : `<span class="rd-band-pill" style="background:#C7D2DA;">N/A</span>`}
+    </div>`;
+}
+
+function gaugeSvg(score){
+  // Simple semicircular arc gauge, 300–900 range, needle-less (dot marker).
+  const min=300, max=900;
+  const pct = Math.max(0, Math.min(1, (score-min)/(max-min)));
+  const angle = Math.PI * (1 - pct); // 180deg(left,300) -> 0deg(right,900)
+  const cx=85, cy=88, r=68;
+  const x = cx + r*Math.cos(angle), y = cy - r*Math.sin(angle);
+  return `
+    <svg viewBox="0 0 170 100">
+      <defs>
+        <linearGradient id="rdGaugeGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#DC2626"/>
+          <stop offset="35%" stop-color="#F59E0B"/>
+          <stop offset="65%" stop-color="#84CC16"/>
+          <stop offset="100%" stop-color="#0B7A6E"/>
+        </linearGradient>
+      </defs>
+      <path d="M17,88 A68,68 0 0 1 153,88" fill="none" stroke="url(#rdGaugeGrad)" stroke-width="12" stroke-linecap="round"/>
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="#123A63" stroke="#fff" stroke-width="2"/>
+    </svg>`;
+}
+
+function renderRiskDashboard(){
+  const d = computeDashboard();
+  if (!d || !reportMeta.score){
+    riskDashboard.style.display = 'none';
+    riskDashboard.innerHTML = '';
+    return;
+  }
+  riskDashboard.style.display = 'block';
+
+  const score = parseInt(reportMeta.score, 10);
+  const scoreBand = bandOf(score, [500,600,700,800], false);
+
+  const repayBand = bandOf(d.repaymentPct, [50,70,85,95], false);
+  const utilBand = d.utilizationPct !== null ? bandOf(d.utilizationPct, [10,30,50,75], true) : null;
+  const ageBand = d.creditAgeYears !== null ? bandOf(d.creditAgeYears, [1,3,5,8], false) : null;
+  const enqBand = bandOf(d.enqRecent, [2,4,6,9], true);
+  const mixBand = bandOf(d.creditMixCount, [2,3,4,5], false);
+
+  const flagsHtml = d.flags.length
+    ? d.flags.map(f => `
+        <div class="rd-flag-item">
+          <div class="rd-sev ${f.sev}">${f.sev}</div>
+          <div><div class="rd-flag-title">${f.title}</div><div class="rd-flag-detail">${f.detail}</div></div>
+        </div>`).join('')
+    : `<div class="rd-flag-item"><div class="rd-sev LOW" style="background:#DCFCE7;color:#166534;">OK</div><div><div class="rd-flag-title">No major risk flags detected</div><div class="rd-flag-detail">Based on the data extracted from this report.</div></div></div>`;
+
+  riskDashboard.innerHTML = `
+    <div class="rd-heading">
+      <h3>Risk &amp; Score Dashboard</h3>
+      <div class="rd-sub">as of ${d.asOf.toLocaleDateString('en-IN')}${reportMeta.reportDateIsFallback ? ' (report date not found — using today)' : ''}</div>
+    </div>
+    <div class="rd-top">
+      <div>
+        <div class="rd-gauge">
+          ${gaugeSvg(score)}
+          <div class="rd-needle-num">${score}${reportMeta.scoreSource === 'ocr' ? ' *' : ''}</div>
+          <div class="rd-band" style="color:${BAND_COLORS[scoreBand]||'#123A63'};">${scoreBand||''}</div>
+          ${reportMeta.scoreSource === 'ocr' ? `<div style="font-family:'Courier New',monospace;font-size:10.5px;color:#B45309;margin-top:2px;">* read via image OCR — verify vs PDF p.${reportMeta.scorePageNum||1}</div>` : ''}
+        </div>
+        <div class="rd-scale"><span>300</span><span>900</span></div>
+      </div>
+      <div class="rd-applicant">
+        <div class="rd-name">${consumerName || 'Consumer'}</div>
+        <span class="rd-tag">${d.total} accounts</span>
+        <span class="rd-tag">${parsedEnquiries.length} enquiries</span>
+      </div>
+    </div>
+
+    <div class="rd-metric-grid">
+      ${metricCardHtml('Repayment History', d.repaymentPct + '%', repayBand)}
+      ${metricCardHtml('Credit Utilization', d.utilizationPct !== null ? d.utilizationPct + '%' : 'N/A', utilBand)}
+      ${metricCardHtml('Credit Age', d.creditAgeYears !== null ? d.creditAgeYears.toFixed(1) + ' yrs' : 'N/A', ageBand)}
+      ${metricCardHtml('Enquiry Frequency', d.enqRecent + ' / 6mo', enqBand)}
+      ${metricCardHtml('Credit Mix', d.creditMixCount + ' type' + (d.creditMixCount===1?'':'s'), mixBand)}
+    </div>
+
+    <div class="rd-flags">
+      <div class="rd-flags-head">
+        <h4>Flag sheet</h4>
+        <span class="rd-flag-count ${d.flags.length ? '' : 'rd-clean'}">${d.flags.length} open</span>
+      </div>
+      ${flagsHtml}
+    </div>
+    <div class="rd-disclaimer">⚠️ These bands and flags are ScoreDesk's own heuristic read of the data in this report — not TransUnion CIBIL's or any bureau's official scoring methodology. The month-by-month DPD (days-past-due) trend isn't extracted yet, so "currently overdue" reflects the latest reported status only. Always verify against the original PDF before making a lending decision.</div>
+  `;
+}
+
 function renderResults(){
   resultsCard.style.display = 'block';
   emptyHint.style.display = parsedAccounts.length ? 'none' : 'block';
   genericWarning.style.display = reportMeta.genericFallback ? 'block' : 'none';
 
+  // Score note now has three states: hidden (read from real text), an OCR
+  // caveat (read from the gauge image, with page + confidence), or the
+  // original "couldn't read it at all" fallback.
+  const pageNum = reportMeta.scorePageNum || 1;
+  if (reportMeta.scoreSource === 'ocr'){
+    scoreImageNote.style.display = 'block';
+    const conf = reportMeta.scoreOcrConfidence;
+    scoreImageNote.innerHTML = `📷 <b>CIBIL Score read from the score gauge image</b> — ScoreDesk located "<b>${reportMeta.score}</b>" printed on the gauge on <b>page ${pageNum}</b> of the PDF${conf ? ` (OCR confidence ~${Math.round(conf)}%)` : ''} using on-device image recognition — not the PDF's text layer, since this report draws the score as a picture. Pictures of numbers can occasionally be misread (e.g. a "0" vs "8" on a blocky gauge font), so please glance at page ${pageNum} to confirm before relying on this number for a lending decision.`;
+  } else if (reportMeta.scoreIsImage && !reportMeta.score){
+    scoreImageNote.style.display = 'block';
+    scoreImageNote.innerHTML = `ℹ️ <b>CIBIL Score not shown above</b> — in this report layout, the score is a drawn dial/gauge picture, and ScoreDesk's on-device image reading couldn't confidently pick out the digits${reportMeta.scorePageNum ? ` on page ${reportMeta.scorePageNum}` : ''}. Please check the number on <b>page ${pageNum} of the PDF</b> directly. Everything else (accounts, EMIs, balances, enquiries) is read from real text and is not affected.`;
+  } else {
+    scoreImageNote.style.display = 'none';
+  }
+
+  renderRiskDashboard();
+
   const activeLoans = parsedAccounts.filter(a => a.status.startsWith('Active'));
   const totalOutstanding = activeLoans.reduce((s,a) => s + (a.balanceNum || 0), 0);
 
+  const scoreDisplay = reportMeta.score
+    ? reportMeta.score + (reportMeta.scoreSource === 'ocr' ? ' *' : '')
+    : (reportMeta.scoreIsImage ? 'See PDF p.' + pageNum : '—');
+  const scoreLbl = reportMeta.scoreSource === 'ocr' ? 'CIBIL Score (from image) *' : 'CIBIL Score';
+
   statGrid.innerHTML = `
     <div class="stat"><div class="num">${consumerName ? consumerName.split(' ')[0] : '—'}</div><div class="lbl">Consumer</div></div>
-    <div class="stat"><div class="num">${reportMeta.score || '—'}</div><div class="lbl">CIBIL Score</div></div>
+    <div class="stat"><div class="num">${scoreDisplay}</div><div class="lbl">${scoreLbl}</div></div>
     <div class="stat"><div class="num">${parsedAccounts.length}</div><div class="lbl">Accounts Found</div></div>
     <div class="stat"><div class="num">${activeLoans.length}</div><div class="lbl">Active Loans</div></div>
     <div class="stat"><div class="num">₹${totalOutstanding.toLocaleString('en-IN')}</div><div class="lbl">Total Outstanding</div></div>
@@ -1913,7 +2518,11 @@ downloadBtn.addEventListener('click', async () => {
   const summaryRows = [
     ['CIBIL Report — Loan Summary'],
     ['Consumer', consumerName],
-    ['CIBIL Score', reportMeta.score],
+    ['CIBIL Score', reportMeta.score
+      ? (reportMeta.scoreSource === 'ocr'
+          ? `${reportMeta.score} (read via image OCR — verify against PDF p.${reportMeta.scorePageNum||1})`
+          : reportMeta.score)
+      : (reportMeta.scoreIsImage ? `Shown as image in PDF — see page ${reportMeta.scorePageNum||1}` : '')],
     ['Total Accounts', reportMeta.totalAccounts || parsedAccounts.length],
     ['Zero-Balance Accounts', reportMeta.zeroBalance],
     ['Total Enquiries', parsedEnquiries.length],
