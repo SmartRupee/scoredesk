@@ -125,8 +125,6 @@
     border:1px solid var(--line); border-radius:var(--radius-sm); background:#F7FBFC;
   }
   .live-meter-gauge{width:62px; flex:0 0 auto;}
-  .live-meter-gauge.pending svg{opacity:.45; animation:liveMeterPulse 1.3s ease-in-out infinite;}
-  @keyframes liveMeterPulse{0%,100%{opacity:.35;} 50%{opacity:.8;}}
   .live-meter-info{min-width:0;}
   .live-meter-num{font-size:21px;font-weight:800;color:var(--navy-2);line-height:1.1;}
   .live-meter-label{font-family:'Courier New',monospace;font-size:11.5px;color:#7A8899;margin-top:3px;}
@@ -158,6 +156,14 @@
     font-size:13.5px; font-weight:700;
     padding:13px 16px; border-radius:var(--radius-sm); margin-bottom:14px;
   }
+  .download-toast{
+    position:fixed; left:50%; bottom:24px; transform:translate(-50%, 20px);
+    max-width:min(90vw, 420px); background:var(--navy); color:#fff;
+    font-size:13px; font-weight:600; line-height:1.4; padding:14px 18px;
+    border-radius:var(--radius-sm); box-shadow:0 8px 28px rgba(11,30,58,0.35);
+    opacity:0; transition:opacity .25s ease, transform .25s ease; z-index:999;
+  }
+  .download-toast.show{opacity:1; transform:translate(-50%, 0);}
   .privacy b{color:var(--navy-2);}
   table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:10px;}
   th{text-align:left;background:var(--navy-2);color:#fff;padding:10px 12px;font-size:11.5px;text-transform:uppercase;letter-spacing:0.5px;}
@@ -180,11 +186,12 @@
   .rd-heading .rd-sub{font-size:11.5px; color:#7A8899; font-family:'Courier New',monospace;}
 
   .rd-top{display:flex; gap:24px; align-items:center; flex-wrap:wrap; background:#F7FBFC; border:1px solid var(--line); border-radius:var(--radius); padding:20px; margin-bottom:18px;}
-  .rd-gauge{position:relative; width:170px; height:100px; flex-shrink:0;}
-  .rd-gauge svg{width:100%; height:100%;}
-  .rd-gauge .rd-needle-num{position:absolute; left:0; right:0; bottom:6px; text-align:center; font-size:30px; font-weight:800; color:var(--navy);}
-  .rd-gauge .rd-band{position:absolute; left:0; right:0; bottom:-18px; text-align:center; font-size:12px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;}
-  .rd-scale{display:flex; justify-content:space-between; width:170px; font-family:'Courier New',monospace; font-size:10.5px; color:#9AAAB8; margin-top:-4px;}
+  .rd-gauge{display:flex; flex-direction:column; align-items:center; width:170px; flex-shrink:0;}
+  .rd-gauge svg{width:100%; height:auto; display:block;}
+  .rd-gauge .rd-needle-num{margin-top:-10px; text-align:center; font-size:30px; font-weight:800; color:var(--navy); line-height:1;}
+  .rd-gauge .rd-band{text-align:center; font-size:12px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; margin-top:3px;}
+  .rd-gauge .rd-ocr-caveat{text-align:center; font-family:'Courier New',monospace; font-size:10.5px; color:#B45309; margin-top:5px; line-height:1.4;}
+  .rd-scale{display:flex; justify-content:space-between; width:170px; font-family:'Courier New',monospace; font-size:10.5px; color:#9AAAB8; margin-top:2px;}
   .rd-applicant{flex:1; min-width:180px;}
   .rd-applicant .rd-name{font-size:17px; font-weight:800; color:var(--navy);}
   .rd-applicant .rd-tag{display:inline-block; font-size:10.5px; font-family:'Courier New',monospace; text-transform:uppercase; background:#E7F3F1; color:var(--teal-2); border-radius:6px; padding:3px 8px; margin-top:6px; margin-right:6px;}
@@ -211,6 +218,29 @@
   .rd-flag-title{font-weight:700; color:var(--ink); font-size:13.5px;}
   .rd-flag-detail{font-size:12.5px; color:#5B7A99; margin-top:2px;}
   .rd-disclaimer{margin-top:14px; font-size:11.5px; color:#9AAAB8; line-height:1.5;}
+
+  /* ---------- Scan summary: status chips + process-flow strip ---------- */
+  .scan-summary{
+    display:flex; flex-direction:column; gap:14px; margin-bottom:18px;
+    padding:16px 18px; border-radius:var(--radius); border:1px solid var(--line);
+    background:linear-gradient(135deg,#F7FBFC 0%,#FFFFFF 100%);
+  }
+  .ss-chips{display:flex; flex-wrap:wrap; gap:8px;}
+  .ss-chip{
+    display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700;
+    font-family:'Courier New',monospace; text-transform:uppercase; letter-spacing:.3px;
+    padding:6px 11px; border-radius:20px; background:#E7F3F1; color:var(--teal-2);
+  }
+  .ss-chip.warn{background:#FEF3C7; color:#92400E;}
+  .ss-chip.info{background:#EEF6FF; color:#1D4ED8;}
+  .ss-flow{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .ss-step{
+    display:flex; flex-direction:column; gap:2px; padding:9px 14px; border-radius:var(--radius-sm);
+    background:#fff; border:1px solid var(--line); min-width:118px;
+  }
+  .ss-step .ss-step-lbl{font-family:'Courier New',monospace; font-size:10px; color:#7A8899; text-transform:uppercase;}
+  .ss-step .ss-step-val{font-size:14px; font-weight:800; color:var(--navy-2);}
+  .ss-arrow{color:#C7D2DA; font-size:16px; flex:none;}
 
   /* ---------- FAQ ---------- */
   .faq-item{border-bottom:1px solid var(--line); padding:14px 0;}
@@ -395,6 +425,7 @@
 
     <div class="card" id="resultsCard" style="display:none;">
       <h2>Step 2 — Review what was found</h2>
+      <div id="scanSummary" class="scan-summary" style="display:none;"></div>
       <div class="stat-grid" id="statGrid"></div>
       <div id="riskDashboard" class="risk-dashboard" style="display:none;"></div>
       <div id="emptyHint" class="empty-hint" style="display:none;">Some fields couldn't be auto-detected — this can happen if the PDF was scanned as an image rather than text. Check the preview table below and correct anything odd directly in the downloaded Excel file.</div>
@@ -404,6 +435,7 @@
       <div id="scoreImageNote" class="password-box" style="display:none; background:#EEF6FF; border-color:#BFDBFE;">
         ℹ️ <b>CIBIL Score not shown above</b> — in this report layout, the score is a drawn dial/gauge picture, not text, so it can't be read reliably from the file (a picture of a "6" and "9" digit can easily be misread as an "8"). Please check the number on <b>page 1 of the PDF</b> directly. Everything else (accounts, EMIs, balances, enquiries) is read from real text and is not affected.
       </div>
+      <div id="summaryOnlyNote" class="password-box" style="display:none; background:#EEF6FF; border-color:#BFDBFE;"></div>
       <div class="table-wrap">
         <table id="loanTable">
           <thead><tr><th>#</th><th>Type</th><th>Owner</th><th>Opened</th><th>Closed</th><th>Sanctioned/High Credit</th><th>Balance</th><th>EMI</th><th>Status</th></tr></thead>
@@ -412,6 +444,7 @@
       </div>
       <div class="ready-banner" id="readyBanner" style="display:none;">✅ Your file is ready to download.</div>
       <button class="primary download" id="downloadBtn">Click here to download</button>
+      <div id="downloadToast" class="download-toast" style="display:none;"></div>
     </div>
 
     <!-- Enquiry lives directly on the main/home page, not behind its own tab -->
@@ -782,11 +815,29 @@ const downloadBtn = document.getElementById('downloadBtn');
 const emptyHint = document.getElementById('emptyHint');
 const genericWarning = document.getElementById('genericWarning');
 const scoreImageNote = document.getElementById('scoreImageNote');
+const summaryOnlyNote = document.getElementById('summaryOnlyNote');
 const passwordBox = document.getElementById('passwordBox');
 const pdfPasswordInput = document.getElementById('pdfPasswordInput');
 const pdfPasswordSubmit = document.getElementById('pdfPasswordSubmit');
 const passwordError = document.getElementById('passwordError');
 const readyBanner = document.getElementById('readyBanner');
+const downloadToast = document.getElementById('downloadToast');
+let downloadToastTimer = null;
+// Some mobile browsers (esp. Chrome on Android in certain settings) save
+// the file straight to Downloads without showing their own notification
+// or download bar — leaving no confirmation the click actually worked.
+// This in-page toast always shows regardless of the browser's own
+// behavior, so the person isn't left wondering whether anything happened.
+function showDownloadToast(filename){
+  downloadToast.textContent = `✅ Downloaded "${filename}" — check your device's Downloads folder (or notification shade) if you don't see it open.`;
+  downloadToast.style.display = 'block';
+  requestAnimationFrame(() => downloadToast.classList.add('show'));
+  clearTimeout(downloadToastTimer);
+  downloadToastTimer = setTimeout(() => {
+    downloadToast.classList.remove('show');
+    setTimeout(() => { downloadToast.style.display = 'none'; }, 300);
+  }, 6000);
+}
 const progressTrack = document.getElementById('progressTrack');
 const progressFill = document.getElementById('progressFill');
 const magicText = document.getElementById('magicText');
@@ -799,6 +850,10 @@ let parsedAccounts = [];
 let parsedEnquiries = [];
 let consumerName = "";
 let reportMeta = {};
+let lastFileName = '';
+let lastScanDurationMs = 0;
+let lastPageCount = 0;
+const scanSummary = document.getElementById('scanSummary');
 
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('hover'); });
@@ -848,27 +903,75 @@ function stopProgress(success){
 // an at-a-glance read on the CIBIL Score before the full results/dashboard
 // in Step 2 exist yet. Reuses gaugeSvg() (defined further down) so the
 // needle position always matches the final Risk & Score Dashboard gauge.
+//
+// While scanning, the needle continuously sweeps 300↔900 (via
+// requestAnimationFrame) so it visibly "moves while reading" the report,
+// rather than sitting on a static placeholder. Once the real score is
+// known — whether read from text or recovered via image OCR — it eases
+// smoothly to a stop at that exact value instead of jump-cutting.
+let liveMeterAnim = null;
+function stopLiveMeterAnim(){
+  if (liveMeterAnim && liveMeterAnim.raf) cancelAnimationFrame(liveMeterAnim.raf);
+  liveMeterAnim = null;
+}
+function startLiveMeterSweep(){
+  stopLiveMeterAnim();
+  const t0 = performance.now();
+  const state = { raf: null, lastVal: 600 };
+  const cyclesSec = 2.2; // one full 300->900->300 sweep per ~2.2s
+  function frame(now){
+    const t = (now - t0) / 1000;
+    const pct = (Math.sin(t * (2 * Math.PI / cyclesSec) - Math.PI / 2) + 1) / 2; // 0..1
+    const val = Math.round(300 + pct * 600);
+    state.lastVal = val;
+    liveMeterGauge.innerHTML = gaugeSvg(val);
+    state.raf = requestAnimationFrame(frame);
+  }
+  state.raf = requestAnimationFrame(frame);
+  liveMeterAnim = state;
+}
+function settleLiveMeterTo(finalScore){
+  const startVal = (liveMeterAnim && liveMeterAnim.lastVal) || 600;
+  stopLiveMeterAnim();
+  const t0 = performance.now();
+  const dur = 650;
+  const state = { raf: null };
+  function frame(now){
+    const t = Math.min(1, (now - t0) / dur);
+    const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic — decelerates into place
+    const val = Math.round(startVal + (finalScore - startVal) * eased);
+    liveMeterGauge.innerHTML = gaugeSvg(val);
+    liveMeterNum.textContent = t < 1 ? val : finalScore;
+    if (t < 1){
+      state.raf = requestAnimationFrame(frame);
+    } else {
+      liveMeterAnim = null;
+    }
+  }
+  state.raf = requestAnimationFrame(frame);
+  liveMeterAnim = state;
+}
+
 function showLiveMeter(state, pageNum, score){
   liveScoreMeter.style.display = 'flex';
   if (state === 'pending'){
-    liveMeterGauge.className = 'live-meter-gauge pending';
-    liveMeterGauge.innerHTML = gaugeSvg(600);
+    liveMeterGauge.className = 'live-meter-gauge';
     liveMeterNum.textContent = '…';
+    startLiveMeterSweep();
     liveMeterLabel.className = 'live-meter-label';
     liveMeterLabel.textContent = pageNum ? `Reading score gauge on page ${pageNum}…` : 'Reading CIBIL Score…';
   } else if (state === 'ocr'){
     liveMeterGauge.className = 'live-meter-gauge';
-    liveMeterGauge.innerHTML = gaugeSvg(parseInt(score, 10));
-    liveMeterNum.textContent = score;
+    settleLiveMeterTo(parseInt(score, 10));
     liveMeterLabel.className = 'live-meter-label ocr';
     liveMeterLabel.textContent = `Read from the score image on page ${pageNum} — please confirm visually`;
   } else if (state === 'text'){
     liveMeterGauge.className = 'live-meter-gauge';
-    liveMeterGauge.innerHTML = gaugeSvg(parseInt(score, 10));
-    liveMeterNum.textContent = score;
+    settleLiveMeterTo(parseInt(score, 10));
     liveMeterLabel.className = 'live-meter-label';
     liveMeterLabel.textContent = 'Read directly from the report text';
   } else {
+    stopLiveMeterAnim();
     liveMeterGauge.className = 'live-meter-gauge';
     liveMeterGauge.innerHTML = gaugeSvg(300);
     liveMeterNum.textContent = '—';
@@ -877,6 +980,7 @@ function showLiveMeter(state, pageNum, score){
   }
 }
 function hideLiveMeter(){
+  stopLiveMeterAnim();
   liveScoreMeter.style.display = 'none';
 }
 
@@ -977,83 +1081,105 @@ async function extractScoreViaOCR(page, onStatus){
   const ctx = canvas.getContext('2d');
   await page.render({ canvasContext: ctx, viewport }).promise;
 
-  const worker = await getOcrWorker();
   onStatus && onStatus('Locating score gauge…');
-  const { data } = await worker.recognize(canvas);
-  const words = data.words || [];
 
-  const norm = s => (s || '').replace(/[oO]/g, '0').replace(/\s+/g, '');
-  const w300 = words.filter(w => norm(w.text) === '300');
-  const w900 = words.filter(w => norm(w.text) === '900');
-
-  let anchorPair = null;
-  outer:
-  for (const a of w300){
-    for (const b of w900){
-      const rowH = Math.max(1, a.bbox.y1 - a.bbox.y0);
-      const sameLine = Math.abs(a.bbox.y0 - b.bbox.y0) < rowH * 1.6;
-      if (sameLine && b.bbox.x0 > a.bbox.x1){
-        anchorPair = { left: a, right: b };
-        break outer;
-      }
+  // Locate the CIBIL/credit SCORE section heading using the PDF's own real
+  // text layer (not OCR) — these section headings are consistently solid
+  // caps ("CIBIL SCORE") across every layout seen so far, unlike the page
+  // title ("CIBIL Score & Credit Report", mixed case) or body prose that
+  // happens to mention "score" in passing. This gives a reliable,
+  // format-agnostic anchor for where the gauge picture sits, without
+  // needing OCR at all for this step — pdf.js already gives us exact
+  // coordinates for real text.
+  let headingViewportY = null;
+  try{
+    const content = await page.getTextContent();
+    for (const item of content.items){
+      const t = (item.str || '').trim();
+      if (!t || t !== t.toUpperCase()) continue;      // must be solid caps
+      if (!/SCORE/.test(t)) continue;
+      if (t.replace(/[^A-Z]/g, '').length > 20) continue; // headings are short
+      const [, vy] = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
+      if (headingViewportY === null || vy < headingViewportY) headingViewportY = vy;
     }
-  }
+  }catch(e){ /* fall through — still try from the top of the page below */ }
+  const baseY = headingViewportY !== null ? headingViewportY : 0;
+  const pageW = canvas.width, pageH = canvas.height;
 
-  if (anchorPair){
-    onStatus && onStatus('Reading score digits…');
-    const gapW = anchorPair.right.bbox.x0 - anchorPair.left.bbox.x1;
-    const pad = Math.max(2, gapW * 0.05);
-    const x0 = Math.max(0, anchorPair.left.bbox.x1 + pad);
-    const x1 = Math.min(canvas.width, anchorPair.right.bbox.x0 - pad);
-    const rowH = Math.max(1, anchorPair.left.bbox.y1 - anchorPair.left.bbox.y0);
-    const yMid = (anchorPair.left.bbox.y0 + anchorPair.left.bbox.y1) / 2;
-    const y0 = Math.max(0, yMid - rowH * 2.5);
-    const y1 = Math.min(canvas.height, yMid + rowH * 2.5);
-    const cropW = Math.max(1, Math.round(x1 - x0));
-    const cropH = Math.max(1, Math.round(y1 - y0));
+  onStatus && onStatus('Reading score digits…');
 
-    if (cropW > 4 && cropH > 4){
-      const cropCanvas = document.createElement('canvas');
-      cropCanvas.width = cropW;
-      cropCanvas.height = cropH;
-      cropCanvas.getContext('2d').drawImage(canvas, x0, y0, cropW, cropH, 0, 0, cropW, cropH);
+  // The exact pixel band the score number sits in (relative to its
+  // heading) varies a little by gauge artwork/size, and testing showed a
+  // single pixel-perfect crop is too brittle — a few pixels of offset can
+  // flip a correct read into a wrong one (e.g. "690" misread as "698" or
+  // worse). Instead, run a small ensemble of overlapping crop windows
+  // around the expected area and take whichever number the crops agree on
+  // most — wrong reads tend to be scattered and inconsistent, while the
+  // correct number keeps recurring across different crops.
+  const EXCLUDED = new Set(['300','650','699','700','749','750','799','800','900']); // CIBIL's fixed scale + standard band boundaries
+  const dy0Opts = [0.08, 0.095, 0.105, 0.115, 0.125];
+  const dy1Opts = [0.13, 0.145, 0.155];
+  const xOpts = [[0.03, 0.30], [0.06, 0.32]];
 
-      let cropData;
-      try{
-        await worker.setParameters({ tessedit_char_whitelist: '0123456789' });
-        const res = await worker.recognize(cropCanvas);
-        cropData = res.data;
-      } finally {
-        await worker.setParameters({ tessedit_char_whitelist: '' });
-      }
+  const worker = await getOcrWorker();
+  const votes = new Map();
+  let attempts = 0;
+  const totalPlanned = dy0Opts.reduce((acc, dy0) =>
+    acc + dy1Opts.filter(dy1 => dy1 > dy0).length * xOpts.length, 0);
 
-      const digitMatch = (cropData.text || '').match(/\d{3}/);
-      if (digitMatch){
-        const n = parseInt(digitMatch[0], 10);
-        if (n >= 300 && n <= 900){
-          return { score: String(n), confidence: cropData.confidence, method: 'anchor' };
+  try{
+    await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: '6' });
+    for (const dy0 of dy0Opts){
+      for (const dy1 of dy1Opts){
+        if (dy1 <= dy0) continue;
+        for (const [x0f, x1f] of xOpts){
+          const y0 = Math.max(0, baseY + dy0 * pageH);
+          const y1 = Math.min(pageH, baseY + dy1 * pageH);
+          const x0 = Math.max(0, x0f * pageW);
+          const x1 = Math.min(pageW, x1f * pageW);
+          const cw = Math.round(x1 - x0), ch = Math.round(y1 - y0);
+          if (cw < 20 || ch < 10) continue;
+
+          const cropCanvas = document.createElement('canvas');
+          cropCanvas.width = cw * 4;
+          cropCanvas.height = ch * 4;
+          const cctx = cropCanvas.getContext('2d');
+          cctx.imageSmoothingEnabled = true;
+          cctx.imageSmoothingQuality = 'high';
+          cctx.drawImage(canvas, x0, y0, cw, ch, 0, 0, cw * 4, ch * 4);
+
+          attempts++;
+          onStatus && onStatus(`Reading score digits… (${attempts}/${totalPlanned})`);
+          const { data } = await worker.recognize(cropCanvas);
+          const tokens = new Set((data.text || '').match(/\d{3}/g) || []);
+          for (const t of tokens){
+            if (EXCLUDED.has(t)) continue;
+            const n = parseInt(t, 10);
+            if (n < 300 || n > 900) continue;
+            votes.set(t, (votes.get(t) || 0) + 1);
+          }
         }
       }
     }
+  } finally {
+    await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3' });
   }
 
-  // Fallback: no clean 300/900 anchor pair found (a differently-drawn
-  // gauge) — scan the full-page OCR text near a "SCORE" heading for a
-  // plausible 3-digit number, excluding the scale endpoints themselves.
-  const text = data.text || '';
-  const nearScore = text.match(/(?:CIBIL\s*)?SCORE[\s\S]{0,150}/i);
-  if (nearScore){
-    const nums = nearScore[0].match(/\b\d{3}\b/g) || [];
-    const candidate = nums.find(n => n !== '300' && n !== '900');
-    if (candidate){
-      const n = parseInt(candidate, 10);
-      if (n >= 300 && n <= 900){
-        return { score: String(n), confidence: null, method: 'fallback' };
-      }
-    }
-  }
+  if (votes.size === 0 || attempts === 0) return null;
+  const sorted = [...votes.entries()].sort((a, b) => b[1] - a[1]);
+  const [topToken, topVotes] = sorted[0];
+  const secondVotes = sorted[1] ? sorted[1][1] : 0;
+  // Require a STRONG majority, not just a plurality — real-world testing
+  // showed a weak "winner" (e.g. 2 votes out of 24, barely ahead of a
+  // 1-vote runner-up) can still be flat-out wrong. The correct number
+  // should recur across a meaningful fraction of the independent crop
+  // attempts and clearly outnumber the runner-up; a narrow win is treated
+  // as noise, not a confident read.
+  const minVotes = Math.max(5, Math.ceil(attempts * 0.24));
+  if (topVotes < minVotes || topVotes < secondVotes * 2) return null;
 
-  return null;
+  const confidence = Math.round((topVotes / attempts) * 100);
+  return { score: topToken, confidence, method: 'ensemble' };
 }
 
 // Some PDFs (especially ones with kerning-adjusted fonts, common in
@@ -1064,11 +1190,20 @@ async function extractScoreViaOCR(page, onStatus){
 // matching. Instead, only insert a space where there's an actual visual
 // gap between two text items (based on their real on-page position),
 // and start a new line when the vertical position changes.
+//
+// IMPORTANT: line breaks are decided purely from each item's actual Y
+// position, never from pdf.js's own item.hasEOL flag. Browser "Print to
+// PDF" exports (common for consumer self-serve reports, e.g. CIBIL's
+// myscore.cibil.com CreditView pages) mark hasEOL on text runs that sit
+// mid-line — e.g. splitting "MS RAKHEE SHROFF" into an EOL-flagged "MS"
+// followed by "RAKHEE SHROFF" on the very same visual row, which silently
+// truncated names to a single word/prefix. Real Y-position is reliable
+// regardless of how the source PDF was generated; hasEOL is not.
 function itemsToText(items){
   let text = '';
   let last = null;
   for (const item of items){
-    if (item.str === '' && !item.hasEOL) continue;
+    if (item.str === '') continue;
     if (last){
       const sameLine = Math.abs(item.transform[5] - last.transform[5]) < (item.height || 8) * 0.5;
       if (!sameLine){
@@ -1083,7 +1218,6 @@ function itemsToText(items){
     }
     text += item.str;
     last = item;
-    if (item.hasEOL) text += '\n';
   }
   return text;
 }
@@ -1098,6 +1232,8 @@ async function handleFile(file){
   // Tag this run. If a newer file is selected before this one finishes,
   // its result gets discarded below instead of overwriting the newer one.
   const requestId = ++currentRequestId;
+  const scanStartTime = performance.now();
+  lastFileName = file.name;
 
   setStatus('Reading PDF…');
   resultsCard.style.display = 'none';
@@ -1105,11 +1241,15 @@ async function handleFile(file){
   loanTableBody.innerHTML = '';
   statGrid.innerHTML = '';
   hidePasswordPrompt();
-  hideLiveMeter();
+  // Start the needle sweeping the instant a scan begins — it stays in
+  // motion through text extraction and parsing, then eases to a stop at
+  // the real score once one is found (from text or, failing that, OCR).
+  showLiveMeter('pending');
   startProgress();
   try{
     const buf = await file.arrayBuffer();
     const pdf = await loadPdfWithPassword(buf);
+    lastPageCount = pdf.numPages;
     let fullText = '';
     let scannedPageCount = 0;
     const pageTexts = []; // pageTexts[i-1] = page i's text — used below to
@@ -1151,18 +1291,23 @@ async function handleFile(file){
     if (reportMeta.scoreIsImage && !reportMeta.score){
       const targetPageNum = findScorePageNumber(pageTexts) || 1;
       reportMeta.scorePageNum = targetPageNum;
-      showLiveMeter('pending', targetPageNum);
+      showLiveMeter('pending', targetPageNum); // keep sweeping, now with a page-specific label
       updateProgress(0.90);
       try{
-        setStatus(`Reading CIBIL Score from page ${targetPageNum} (image)…`);
         const scorePage = await pdf.getPage(targetPageNum);
-        const ocrResult = await extractScoreViaOCR(scorePage, s => setStatus(s));
+        const ocrResult = await extractScoreViaOCR(scorePage, s => {
+          setStatus(s);
+          // Mirror the OCR ensemble's progress into the meter's own label
+          // too, so the two stay in sync while the needle keeps sweeping.
+          liveMeterLabel.textContent = s;
+          liveMeterLabel.className = 'live-meter-label';
+        });
         if (requestId !== currentRequestId) return; // superseded by a newer upload
         if (ocrResult){
           reportMeta.score = ocrResult.score;
           reportMeta.scoreSource = 'ocr';
           reportMeta.scoreOcrConfidence = ocrResult.confidence;
-          showLiveMeter('ocr', targetPageNum, ocrResult.score);
+          showLiveMeter('ocr', targetPageNum, ocrResult.score); // needle eases to a stop here
         } else {
           reportMeta.scoreSource = 'unavailable';
           showLiveMeter('unavailable', targetPageNum);
@@ -1174,17 +1319,29 @@ async function handleFile(file){
       }
     } else if (reportMeta.score){
       reportMeta.scoreSource = 'text';
+      reportMeta.scorePageNum = findScorePageNumber(pageTexts) || 1;
+      showLiveMeter('text', reportMeta.scorePageNum, reportMeta.score); // needle eases to a stop here
+    } else {
+      showLiveMeter('unavailable', null);
     }
 
     updateProgress(0.97);
+    lastScanDurationMs = performance.now() - scanStartTime;
     renderResults();
     const scannedNote = scannedPageCount > 0 ? ` (${scannedPageCount} scanned page${scannedPageCount===1?'':'s'} read via OCR)` : '';
     setStatus(`Done — found ${parsedAccounts.length} accounts and ${parsedEnquiries.length} enquiries.${scannedNote}`, 'ok');
     readyBanner.style.display = 'block';
     stopProgress(true);
-    // The full Risk & Score Dashboard below now shows the same gauge with
-    // more context, so fade the compact Step-1 meter out once results land.
-    setTimeout(hideLiveMeter, 1400);
+    // The full Risk & Score Dashboard below shows the same gauge with more
+    // context, so fade the compact Step-1 meter out once results land —
+    // but ONLY if that dashboard actually rendered. It needs at least one
+    // itemized account to compute from (computeDashboard() returns null
+    // otherwise, e.g. summary-only exports like myscore.cibil.com's
+    // CreditView dashboard), so for those reports the live meter is the
+    // only score gauge on the page and must stay visible, not disappear.
+    if (riskDashboard.style.display === 'block'){
+      setTimeout(hideLiveMeter, 1400);
+    }
   }catch(err){
     if (requestId !== currentRequestId) return; // superseded by a newer upload
     console.error(err);
@@ -1367,6 +1524,11 @@ function parseReport(text){
   reportMeta.scoreSource = null;
   reportMeta.scoreOcrConfidence = null;
   reportMeta.scorePageNum = null;
+  reportMeta.summaryOnly = false;
+  reportMeta.summaryCurrentBalance = null;
+  reportMeta.summaryAmountOverdue = null;
+  reportMeta.summaryEnquiries = null;
+  reportMeta.summaryActiveCount = null;
   const foundDate = extractReportDate(text);
   reportMeta.reportDate = foundDate || new Date();
   reportMeta.reportDateIsFallback = !foundDate;
@@ -2169,13 +2331,31 @@ function parseFormatH(text){
   const closedLoans = text.match(/CLOSED\s+ACCOUNTS[\s\S]{0,120}?\bLoans\b\s*\n?\s*(\d+)/i);
   const openCards = text.match(/OPEN\s+ACCOUNTS[\s\S]{0,120}?Credit\s*Cards\s*\n?\s*(\d+)/i);
   const closedCards = text.match(/CLOSED\s+ACCOUNTS[\s\S]{0,120}?Credit\s*Cards\s*\n?\s*(\d+)/i);
-  const totalAccts = [openLoans, closedLoans, openCards, closedCards]
-    .reduce((sum, m) => sum + (m ? parseInt(m[1], 10) : 0), 0);
+  const openLoansN = openLoans ? parseInt(openLoans[1], 10) : 0;
+  const closedLoansN = closedLoans ? parseInt(closedLoans[1], 10) : 0;
+  const openCardsN = openCards ? parseInt(openCards[1], 10) : 0;
+  const closedCardsN = closedCards ? parseInt(closedCards[1], 10) : 0;
+  const totalAccts = openLoansN + closedLoansN + openCardsN + closedCardsN;
   reportMeta.totalAccounts = String(totalAccts);
   reportMeta.zeroBalance = '';
 
-  // No itemized account or enquiry rows exist in this export — only the
-  // totals above — so parsedAccounts/parsedEnquiries correctly stay empty.
+  // This export reports aggregate counts/amounts only — there's no
+  // itemized per-account or per-enquiry table anywhere in the PDF (this is
+  // a genuine property of the format, not a parsing gap), so
+  // parsedAccounts/parsedEnquiries correctly stay empty. To keep the
+  // results screen from misleadingly showing "0" everywhere despite real
+  // data existing, capture those aggregate figures separately and flag
+  // this report as summary-only so renderResults() can display them
+  // instead of counts derived from the (empty) per-account arrays.
+  const balanceMatch = text.match(/\bCurrent\s*Balance\s*\n?\s*([\d,]+)/i);
+  const overdueMatch = text.match(/\bAmount\s*Overdue\s*\n?\s*([\d,]+)/i);
+  const enqMatch = text.match(/ENQUIRIES[\s\S]{0,60}?Last\s*3\s*Years\s*\n?\s*(\d+)/i);
+
+  reportMeta.summaryOnly = true;
+  reportMeta.summaryCurrentBalance = balanceMatch ? parseInt(balanceMatch[1].replace(/,/g,''), 10) : 0;
+  reportMeta.summaryAmountOverdue = overdueMatch ? parseInt(overdueMatch[1].replace(/,/g,''), 10) : 0;
+  reportMeta.summaryEnquiries = enqMatch ? parseInt(enqMatch[1], 10) : 0;
+  reportMeta.summaryActiveCount = openLoansN + openCardsN;
   // reportMeta.genericFallback is left false since the format IS recognized.
   return true;
 }
@@ -2253,6 +2433,16 @@ const BAND_COLORS = {'Poor':'#DC2626','Fair':'#F59E0B','Good':'#84CC16','Very Go
 
 // breakpoints has 4 ascending values splitting the 5 bands. If `inverse` is
 // true, a LOWER value is better (e.g. utilization, enquiry count).
+// The CIBIL Score itself uses a simple 3-tier band — Poor below 700, Fair
+// 700–749, Excellent 750+ — kept separate from the generic metric-card
+// bandOf() below (which powers Repayment History/Utilization/etc. and uses
+// its own metric-appropriate thresholds, not the score's 300–900 scale).
+function cibilScoreBand(score){
+  if (score < 700) return 'Poor';
+  if (score < 750) return 'Fair';
+  return 'Excellent';
+}
+
 function bandOf(value, breakpoints, inverse){
   if (value === null || value === undefined || isNaN(value)) return null;
   const order = inverse ? [...breakpoints].reverse().map(b => -b) : breakpoints;
@@ -2368,12 +2558,15 @@ function metricCardHtml(label, valueText, band){
 }
 
 function gaugeSvg(score){
-  // Simple semicircular arc gauge, 300–900 range, needle-less (dot marker).
+  // Semicircular arc gauge, 300–900 range, with a proper needle (pivot hub
+  // + line + tip dot) rather than just a floating dot marker — a bare dot
+  // read as "meter missing" since it barely showed against the arc.
   const min=300, max=900;
   const pct = Math.max(0, Math.min(1, (score-min)/(max-min)));
   const angle = Math.PI * (1 - pct); // 180deg(left,300) -> 0deg(right,900)
   const cx=85, cy=88, r=68;
-  const x = cx + r*Math.cos(angle), y = cy - r*Math.sin(angle);
+  const needleLen = r - 12;
+  const tipX = cx + needleLen*Math.cos(angle), tipY = cy - needleLen*Math.sin(angle);
   return `
     <svg viewBox="0 0 170 100">
       <defs>
@@ -2385,7 +2578,9 @@ function gaugeSvg(score){
         </linearGradient>
       </defs>
       <path d="M17,88 A68,68 0 0 1 153,88" fill="none" stroke="url(#rdGaugeGrad)" stroke-width="12" stroke-linecap="round"/>
-      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="#123A63" stroke="#fff" stroke-width="2"/>
+      <line x1="${cx}" y1="${cy}" x2="${tipX.toFixed(1)}" y2="${tipY.toFixed(1)}" stroke="#123A63" stroke-width="3.5" stroke-linecap="round"/>
+      <circle cx="${tipX.toFixed(1)}" cy="${tipY.toFixed(1)}" r="4" fill="#123A63"/>
+      <circle cx="${cx}" cy="${cy}" r="7" fill="#123A63" stroke="#fff" stroke-width="2.5"/>
     </svg>`;
 }
 
@@ -2399,7 +2594,7 @@ function renderRiskDashboard(){
   riskDashboard.style.display = 'block';
 
   const score = parseInt(reportMeta.score, 10);
-  const scoreBand = bandOf(score, [500,600,700,800], false);
+  const scoreBand = cibilScoreBand(score);
 
   const repayBand = bandOf(d.repaymentPct, [50,70,85,95], false);
   const utilBand = d.utilizationPct !== null ? bandOf(d.utilizationPct, [10,30,50,75], true) : null;
@@ -2426,7 +2621,7 @@ function renderRiskDashboard(){
           ${gaugeSvg(score)}
           <div class="rd-needle-num">${score}${reportMeta.scoreSource === 'ocr' ? ' *' : ''}</div>
           <div class="rd-band" style="color:${BAND_COLORS[scoreBand]||'#123A63'};">${scoreBand||''}</div>
-          ${reportMeta.scoreSource === 'ocr' ? `<div style="font-family:'Courier New',monospace;font-size:10.5px;color:#B45309;margin-top:2px;">* read via image OCR — verify vs PDF p.${reportMeta.scorePageNum||1}</div>` : ''}
+          ${reportMeta.scoreSource === 'ocr' ? `<div class="rd-ocr-caveat">* read via image OCR — verify vs PDF p.${reportMeta.scorePageNum||1}</div>` : ''}
         </div>
         <div class="rd-scale"><span>300</span><span>900</span></div>
       </div>
@@ -2447,7 +2642,7 @@ function renderRiskDashboard(){
 
     <div class="rd-flags">
       <div class="rd-flags-head">
-        <h4>Flag sheet</h4>
+        <h4>🛡️ Flag sheet</h4>
         <span class="rd-flag-count ${d.flags.length ? '' : 'rd-clean'}">${d.flags.length} open</span>
       </div>
       ${flagsHtml}
@@ -2456,10 +2651,50 @@ function renderRiskDashboard(){
   `;
 }
 
+// Status chips + a 3-step process-flow strip shown above the results —
+// gives an at-a-glance summary of how this report was read before the
+// person digs into the numbers below (which source the score came from,
+// whether the layout was recognized, how long it took, and — since
+// everything here runs client-side — that nothing left the browser).
+function renderScanSummary(){
+  const chips = [];
+  if (reportMeta.bureau && reportMeta.bureau !== 'Unrecognized bureau'){
+    chips.push({ cls: '', text: `✓ ${reportMeta.bureau}` });
+  }
+  if (reportMeta.scoreSource === 'text'){
+    chips.push({ cls: '', text: '✓ Score read from text' });
+  } else if (reportMeta.scoreSource === 'ocr'){
+    const conf = reportMeta.scoreOcrConfidence ? ` ~${Math.round(reportMeta.scoreOcrConfidence)}%` : '';
+    chips.push({ cls: 'warn', text: `📷 Score via image OCR${conf}` });
+  } else if (reportMeta.scoreIsImage){
+    chips.push({ cls: 'warn', text: '⚠ Score not confidently read' });
+  }
+  chips.push({ cls: reportMeta.genericFallback ? 'warn' : '', text: reportMeta.genericFallback ? '⚠ Layout auto-detected' : '✓ Layout recognized' });
+  chips.push({ cls: 'info', text: '🔒 Processed 100% locally' });
+
+  const chipsHtml = chips.map(c => `<span class="ss-chip ${c.cls}">${c.text}</span>`).join('');
+
+  const durSec = lastScanDurationMs ? (lastScanDurationMs / 1000).toFixed(1) + 's' : '—';
+  const fileLbl = lastFileName ? (lastFileName.length > 22 ? lastFileName.slice(0,19) + '…' : lastFileName) : 'PDF';
+
+  scanSummary.style.display = 'flex';
+  scanSummary.innerHTML = `
+    <div class="ss-chips">${chipsHtml}</div>
+    <div class="ss-flow">
+      <div class="ss-step"><div class="ss-step-lbl">1. Uploaded</div><div class="ss-step-val">${fileLbl}</div></div>
+      <span class="ss-arrow">→</span>
+      <div class="ss-step"><div class="ss-step-lbl">2. Parsed in-browser</div><div class="ss-step-val">${durSec} · ${lastPageCount} page${lastPageCount===1?'':'s'}</div></div>
+      <span class="ss-arrow">→</span>
+      <div class="ss-step"><div class="ss-step-lbl">3. Report ready</div><div class="ss-step-val">${parsedAccounts.length} accounts</div></div>
+    </div>
+  `;
+}
+
 function renderResults(){
   resultsCard.style.display = 'block';
-  emptyHint.style.display = parsedAccounts.length ? 'none' : 'block';
+  emptyHint.style.display = (parsedAccounts.length || reportMeta.summaryOnly) ? 'none' : 'block';
   genericWarning.style.display = reportMeta.genericFallback ? 'block' : 'none';
+  summaryOnlyNote.style.display = 'none';
 
   // Score note now has three states: hidden (read from real text), an OCR
   // caveat (read from the gauge image, with page + confidence), or the
@@ -2476,10 +2711,30 @@ function renderResults(){
     scoreImageNote.style.display = 'none';
   }
 
+  // Some CIBIL exports (myscore.cibil.com's "CreditView" self-serve
+  // dashboard) only ever report aggregate counts — there's no per-account
+  // or per-enquiry table anywhere in the source PDF, by design. Without
+  // this note, an empty loan table on a report that otherwise looks fully
+  // parsed (real score, real name) reads as a bug rather than a property
+  // of the format.
+  if (reportMeta.summaryOnly){
+    summaryOnlyNote.style.display = 'block';
+    summaryOnlyNote.innerHTML = `ℹ️ <b>This is a Summary-style CIBIL report</b> (from myscore.cibil.com's CreditView dashboard) — it only contains aggregate counts and totals, not itemized per-account or per-enquiry details, so there's no loan table to show below. The numbers above (accounts, active loans, outstanding, enquiries) are read directly from those totals.`;
+  }
+
   renderRiskDashboard();
 
   const activeLoans = parsedAccounts.filter(a => a.status.startsWith('Active'));
-  const totalOutstanding = activeLoans.reduce((s,a) => s + (a.balanceNum || 0), 0);
+  const totalOutstandingFromAccounts = activeLoans.reduce((s,a) => s + (a.balanceNum || 0), 0);
+
+  // Prefer the report's own aggregate totals when there's no itemized
+  // account list to compute them from — showing "0" everywhere on a
+  // summary-only report would look like a parsing failure rather than
+  // reflect the real (if coarse) numbers the PDF actually contains.
+  const accountsFoundDisplay = reportMeta.summaryOnly ? (reportMeta.totalAccounts || '0') : parsedAccounts.length;
+  const activeLoansDisplay = reportMeta.summaryOnly ? (reportMeta.summaryActiveCount ?? 0) : activeLoans.length;
+  const totalOutstandingDisplay = reportMeta.summaryOnly ? (reportMeta.summaryCurrentBalance ?? 0) : totalOutstandingFromAccounts;
+  const enquiriesDisplay = reportMeta.summaryOnly ? (reportMeta.summaryEnquiries ?? 0) : parsedEnquiries.length;
 
   const scoreDisplay = reportMeta.score
     ? reportMeta.score + (reportMeta.scoreSource === 'ocr' ? ' *' : '')
@@ -2489,10 +2744,10 @@ function renderResults(){
   statGrid.innerHTML = `
     <div class="stat"><div class="num">${consumerName ? consumerName.split(' ')[0] : '—'}</div><div class="lbl">Consumer</div></div>
     <div class="stat"><div class="num">${scoreDisplay}</div><div class="lbl">${scoreLbl}</div></div>
-    <div class="stat"><div class="num">${parsedAccounts.length}</div><div class="lbl">Accounts Found</div></div>
-    <div class="stat"><div class="num">${activeLoans.length}</div><div class="lbl">Active Loans</div></div>
-    <div class="stat"><div class="num">₹${totalOutstanding.toLocaleString('en-IN')}</div><div class="lbl">Total Outstanding</div></div>
-    <div class="stat"><div class="num">${parsedEnquiries.length}</div><div class="lbl">Enquiries</div></div>
+    <div class="stat"><div class="num">${accountsFoundDisplay}</div><div class="lbl">Accounts Found</div></div>
+    <div class="stat"><div class="num">${activeLoansDisplay}</div><div class="lbl">Active Loans</div></div>
+    <div class="stat"><div class="num">₹${totalOutstandingDisplay.toLocaleString('en-IN')}</div><div class="lbl">Total Outstanding</div></div>
+    <div class="stat"><div class="num">${enquiriesDisplay}</div><div class="lbl">Enquiries</div></div>
   `;
 
   loanTableBody.innerHTML = parsedAccounts.map(a => `
@@ -2564,6 +2819,7 @@ downloadBtn.addEventListener('click', async () => {
       const writable = await handle.createWritable();
       await writable.write(blob);
       await writable.close();
+      showDownloadToast(fname);
       return;
     }catch(err){
       if (err && err.name === 'AbortError') return; // visitor cancelled the save dialog — do nothing
@@ -2573,6 +2829,7 @@ downloadBtn.addEventListener('click', async () => {
   // Fallback: normal browser download (goes to the default Downloads folder,
   // or shows the browser's own "Save As" prompt if the visitor has that setting on).
   XLSX.writeFile(wb, fname);
+  showDownloadToast(fname);
 });
 </script>
 
