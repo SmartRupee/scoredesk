@@ -191,6 +191,11 @@
   .rd-gauge .rd-needle-num{margin-top:-10px; text-align:center; font-size:30px; font-weight:800; color:var(--navy); line-height:1;}
   .rd-gauge .rd-band{text-align:center; font-size:12px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; margin-top:3px;}
   .rd-gauge .rd-ocr-caveat{text-align:center; font-family:'Courier New',monospace; font-size:10.5px; color:#B45309; margin-top:5px; line-height:1.4;}
+  .rd-gauge-legend{width:170px; margin-top:10px; display:flex; flex-direction:column; gap:4px;}
+  .rd-legend-row{display:flex; align-items:center; gap:6px; font-size:11px; color:#3A4550;}
+  .rd-legend-swatch{width:9px; height:9px; border-radius:2px; flex:0 0 auto;}
+  .rd-legend-label{flex:1; font-weight:600;}
+  .rd-legend-range{font-family:'Courier New',monospace; color:#7A8899;}
   .rd-scale{display:flex; justify-content:space-between; width:170px; font-family:'Courier New',monospace; font-size:10.5px; color:#9AAAB8; margin-top:2px;}
   .rd-applicant{flex:1; min-width:180px;}
   .rd-applicant .rd-name{font-size:17px; font-weight:800; color:var(--navy);}
@@ -1532,6 +1537,28 @@ function parseReport(text){
   const foundDate = extractReportDate(text);
   reportMeta.reportDate = foundDate || new Date();
   reportMeta.reportDateIsFallback = !foundDate;
+
+  // "Goodscore"-branded CRIF High Mark exports (fingerprint: "CHM Ref. No."
+  // on every page) get routed straight to their own parser rather than
+  // through the generic A–H chain below. Reason: those parsers each key off
+  // fairly generic table headers (e.g. Format B splits account blocks on
+  // any "Member Name" occurrence) that this layout's Credit Enquiries table
+  // also happens to contain as a column header — so whenever that table
+  // has at least one real row, an earlier format can false-positive-match
+  // a single garbled "account" spanning from that row to the end of the
+  // document, and parseFormatI() (the correct parser) never runs at all
+  // because the dispatcher below only tries the next format when the
+  // previous one found zero accounts. Checking this fingerprint first
+  // avoids that class of collision entirely instead of patching each
+  // format's block-detection one report layout at a time.
+  if (/CHM Ref\.\s*No/i.test(text)){
+    parseFormatI(text);
+    if (!reportMeta.score){
+      reportMeta.scoreIsImage = /\b(?:CIBIL|CREDIT|BUREAU)?\s*SCORE\b/i.test(text);
+    }
+    return;
+  }
+
   parseFormatA(text);
   // Format A (lender/bureau "Consumer CIR" layout) found nothing — this may be
   // CIBIL's other common layout: the consumer self-check "CIBIL Score & Report"
@@ -1993,11 +2020,11 @@ function parseFormatC(text){
 const LABELS_D = [
   "Account Number","Date Opened","Date Closed","Ownership","Rate of Interest",
   "Value of Collateral","Type of Collateral","Date Reported","Loan Type","Account Status",
-  "Sanctioned Amt","Current Balance","Amount Overdue","Last Payment Date",
+  "Sanctioned Amt","Highest Credit","Current Balance","Amount Overdue","Last Payment Date",
   "Credit Limit Amt","Repayment Tenure","Total Write-off Amt","Principal Write-off",
   "Settlement Amt","Credit Facility Status","EMI"
 ];
-const NUMERIC_D = new Set(["Sanctioned Amt","Current Balance","Amount Overdue","Credit Limit Amt","Value of Collateral","Total Write-off Amt","Principal Write-off","Settlement Amt","EMI"]);
+const NUMERIC_D = new Set(["Sanctioned Amt","Highest Credit","Current Balance","Amount Overdue","Credit Limit Amt","Value of Collateral","Total Write-off Amt","Principal Write-off","Settlement Amt","EMI"]);
 const labelAltD = [...LABELS_D].sort((a,b) => b.length - a.length).map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
 const fieldRegexD = new RegExp(`(${labelAltD})\\s*([\\s\\S]*?)(?=(?:${labelAltD})|Payment History|Consumer Personal|$)`, 'g');
 
@@ -2018,49 +2045,109 @@ function extractFieldsD(block){
   return out;
 }
 
+// Per-account header line printed cleanly above each "Credit Account
+// details" table, e.g. "GOLD LOAN  Muthoot Finance Limited  Acct 1" or
+// "CONSUMER LOAN  IDFC FIRST BANK LIMITED  Acct 2". PDF text extraction
+// wraps the 2nd word of a 2-word account type (LOAN/CARDS) onto the SAME
+// line as the lender name, so it's captured together in group 2 and split
+// back apart below — this is what recovers the lender name (not available
+// anywhere else as clean text) and avoids the empty "Loan Type" that
+// resulted from that same wrapping inside the field table itself.
+const acctHeaderRegexD2 = /\n([A-Z][A-Z\/ ]{2,30}?)\s+([A-Za-z][A-Za-z0-9&.,'\-\/ ]{2,60}?)\s+Acct\s+(\d+)\n/g;
+
 function parseFormatD(text){
   parsedAccounts = [];
   parsedEnquiries = [];
 
   if (!/experian/i.test(text)) return; // don't misfire on unrelated formats
 
+  reportMeta.bureau = 'Experian';
+
   const nameMatch = text.match(/\bName\s+([A-Z][A-Za-z .]+?)\s*\n/i);
   consumerName = nameMatch ? clean(nameMatch[1]) : '';
 
-  const scoreMatch = text.match(/CREDIT SCORE[\s\S]{0,40}?(\d{3})\b/i);
+  // The score box ("YOUR EXPERIAN / CREDIT SCORE / 547 / Range: 300 – 900")
+  // sits beside a "Score Factors" list in a 2-column layout, so the PDF's
+  // text layer interleaves them line-by-line — a naive "CREDIT SCORE ... 3
+  // digits within N chars" match easily lands on the unrelated "ranges from
+  // 300 - 900" sentence instead (a real bug seen in testing: showed 300
+  // instead of the actual 547). Anchoring on a 3-digit number that sits
+  // completely alone on its own line, within the score section only, avoids
+  // that — every other number in this section has surrounding text on the
+  // same line except the score itself.
+  const scoreSection = text.match(/EXPERIAN CREDIT SCORE([\s\S]*?)(?:REPORT SUMMARY|SUMMARY: CREDIT ACCOUNT|$)/i);
+  const scoreMatch = scoreSection && scoreSection[1].match(/\n\s*(\d{3})\s*\n/);
   reportMeta.score = scoreMatch ? scoreMatch[1] : '';
 
-  const blockStarts = [];
-  const re = /Account Number/gi;
-  let mm;
-  while ((mm = re.exec(text)) !== null) blockStarts.push(mm.index);
+  acctHeaderRegexD2.lastIndex = 0;
+  const headerMatches = [];
+  let hm;
+  while ((hm = acctHeaderRegexD2.exec(text)) !== null) headerMatches.push(hm);
 
-  const blocks = blockStarts.map((start, i) => {
-    const end = i + 1 < blockStarts.length ? blockStarts[i+1] : text.length;
-    return text.substring(start, end);
-  });
+  if (headerMatches.length){
+    headerMatches.forEach((m, i) => {
+      let acctType = clean(m[1]);
+      let lender = clean(m[2]);
+      // Recombine the account type's wrapped 2nd word (LOAN/CARDS) from the
+      // front of what we captured as the lender name.
+      const typeWord2 = lender.match(/^(LOAN|CARDS|CARD)\s+(.*)$/);
+      if (typeWord2){ acctType = acctType + ' ' + typeWord2[1]; lender = typeWord2[2]; }
 
-  blocks.forEach((b, i) => {
-    const f = extractFieldsD(b);
-    if (!f['Loan Type'] && !f['Sanctioned Amt'] && !f['Current Balance']) return; // not a real account block
+      const blockStart = m.index + m[0].length;
+      const blockEnd = i + 1 < headerMatches.length ? headerMatches[i+1].index : text.length;
+      const block = text.substring(blockStart, blockEnd);
+      const f = extractFieldsD(block);
 
-    const balanceRaw = f['Current Balance'] || '';
-    const balanceNum = balanceRaw === '' ? '' : (parseFloat(balanceRaw.replace(/,/g,'')) || 0);
-    const closedVal = f['Date Closed'] || '';
-    const overdue = f['Amount Overdue'] || '';
-    const statusRaw = (f['Account Status'] || '').toUpperCase();
-    let status = statusRaw === 'CLOSED' || closedVal ? 'Closed' : 'Active';
-    if (overdue && parseFloat(overdue.replace(/,/g,'')) > 0) status = 'Active — OVERDUE ₹' + overdue;
+      const balanceRaw = f['Current Balance'] || '';
+      const balanceNum = balanceRaw === '' ? '' : (parseFloat(balanceRaw.replace(/,/g,'')) || 0);
+      const closedVal = f['Date Closed'] || '';
+      const overdue = f['Amount Overdue'] || '';
+      const statusRaw = (f['Account Status'] || '').toUpperCase();
+      let status = statusRaw === 'CLOSED' || closedVal ? 'Closed' : 'Active';
+      if (overdue && parseFloat(overdue.replace(/,/g,'')) > 0) status = 'Active — OVERDUE ₹' + overdue;
 
-    parsedAccounts.push({
-      idx: parsedAccounts.length + 1,
-      type: f['Loan Type'] || '', ownership: f['Ownership'] || '',
-      opened: f['Date Opened'] || '', closed: closedVal,
-      sanctioned: f['Sanctioned Amt'] || '', balance: balanceRaw, balanceNum,
-      emi: f['EMI'] || '', limit: f['Credit Limit Amt'] || '',
-      interest: f['Rate of Interest'] || '', tenure: f['Repayment Tenure'] || '', status
+      parsedAccounts.push({
+        idx: parsedAccounts.length + 1,
+        type: (lender ? lender + ' — ' : '') + acctType, ownership: f['Ownership'] || '',
+        opened: f['Date Opened'] || '', closed: closedVal,
+        sanctioned: f['Sanctioned Amt'] || f['Highest Credit'] || '', balance: balanceRaw, balanceNum,
+        emi: f['EMI'] || '', limit: f['Credit Limit Amt'] || '',
+        interest: f['Rate of Interest'] || '', tenure: f['Repayment Tenure'] || '', status
+      });
     });
-  });
+  } else {
+    // Fallback for an Experian export we haven't seen laid out with the
+    // clean per-account header line above — split on "Account Number"
+    // inside each field table instead (no lender name recoverable here).
+    const blockStarts = [];
+    const re = /Account Number/gi;
+    let mm;
+    while ((mm = re.exec(text)) !== null) blockStarts.push(mm.index);
+
+    blockStarts.forEach((start, i) => {
+      const end = i + 1 < blockStarts.length ? blockStarts[i+1] : text.length;
+      const b = text.substring(start, end);
+      const f = extractFieldsD(b);
+      if (!f['Loan Type'] && !f['Sanctioned Amt'] && !f['Current Balance']) return;
+
+      const balanceRaw = f['Current Balance'] || '';
+      const balanceNum = balanceRaw === '' ? '' : (parseFloat(balanceRaw.replace(/,/g,'')) || 0);
+      const closedVal = f['Date Closed'] || '';
+      const overdue = f['Amount Overdue'] || '';
+      const statusRaw = (f['Account Status'] || '').toUpperCase();
+      let status = statusRaw === 'CLOSED' || closedVal ? 'Closed' : 'Active';
+      if (overdue && parseFloat(overdue.replace(/,/g,'')) > 0) status = 'Active — OVERDUE ₹' + overdue;
+
+      parsedAccounts.push({
+        idx: parsedAccounts.length + 1,
+        type: f['Loan Type'] || f['Highest Credit'] ? (f['Loan Type'] || 'Credit Cards') : '', ownership: f['Ownership'] || '',
+        opened: f['Date Opened'] || '', closed: closedVal,
+        sanctioned: f['Sanctioned Amt'] || f['Highest Credit'] || '', balance: balanceRaw, balanceNum,
+        emi: f['EMI'] || '', limit: f['Credit Limit Amt'] || '',
+        interest: f['Rate of Interest'] || '', tenure: f['Repayment Tenure'] || '', status
+      });
+    });
+  }
 
   reportMeta.totalAccounts = String(parsedAccounts.length);
   reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
@@ -2299,6 +2386,142 @@ function parseFormatG(text){
   reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
 }
 
+// Format I — "Goodscore" branded reports (a CRIF High Mark pull; CRIF's own
+// logo and the "Goodscore" wordmark are printed as images, not text, so
+// they can't be matched directly — the "CHM Ref. No." reference number
+// printed on every page header is this layout's real fingerprint instead).
+// Score is real text ("Your Score is\n510"), not a gauge image, so it
+// doesn't need the OCR fallback. Each account prints as its own bordered
+// card: a "{LENDER} {Account Type}" header line, then
+// "Account Number X | Account Type Y | Account Status Z", then a two-column
+// "Account Details" field grid. That two-column grid is where this layout
+// gets difficult: several field labels wrap across two lines (e.g. "Credit
+// Grantor\nType", "Last Payment\nDate", "Suit filed/willful\ndefault"), and
+// the PDF's text layer interleaves the two columns row-by-row rather than
+// printing one column fully before the other — so a value can end up
+// separated from its label by an unrelated fragment from the other column.
+// normalizeWrappedLabelsI() below stitches the known wrap points back into
+// one line before field matching runs, which recovers the fields that
+// matter most for a lending decision (balance, overdue, sanctioned amount,
+// ownership, security status) reliably; a few secondary fields (exact
+// account number, EMI amount) can still occasionally pick up a stray
+// trailing word from a neighbouring field on this layout.
+function normalizeWrappedLabelsI(t){
+  return t
+    .replace(/Last Payment\s*\n\s*Date/gi, 'Last Payment Date')
+    .replace(/Repayment\s*\n\s*Tenure/gi, 'Repayment Tenure')
+    .replace(/Credit Grantor\s*\n\s*Type/gi, 'Credit Grantor Type')
+    .replace(/Credit Grantor\s*\n\s*Group/gi, 'Credit Grantor Group')
+    .replace(/Suit filed\/willful\s*\n\s*default/gi, 'Suit filed/willful default')
+    .replace(/No Suit\s*\n\s*filed/gi, 'No Suit filed')
+    .replace(/Installment\s*\n\s*Frequency/gi, 'Installment Frequency')
+    .replace(/Installment\s*\n\s*Amt/gi, 'Installment Amt');
+}
+const LABELS_I = [
+  "Date Reported","Disbursed Date","Disbursed Amount","Current Balance","Overdue Amount","Ownership",
+  "Card type","Loan type","Acct Number","Last Paid Amount","Last Payment Date","Repayment Tenure",
+  "Installment Amt","Credit Grantor Type","Credit Grantor Group","Matched Type","Write Off Amt",
+  "Suit filed/willful default","Credit Limit","Cash Limit","Obligation","Security Status",
+  "Interest Rate","Occupation","Income Amount","Closed Date","Installment Frequency"
+];
+const NUMERIC_I = new Set(["Disbursed Amount","Current Balance","Overdue Amount","Last Paid Amount","Credit Limit","Cash Limit","Obligation","Write Off Amt","Income Amount"]);
+const labelAltI = [...LABELS_I].sort((a,b) => b.length - a.length)
+  .map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+')).join('|');
+const fieldRegexI = new RegExp(`(${labelAltI})\\s*([\\s\\S]*?)(?=(?:${labelAltI})|Payment History|$)`, 'g');
+// The "Account Type ..." portion of this header row can itself wrap onto a
+// second line for a long product name (e.g. "Loan Against Bank Deposits"),
+// which sometimes drops the literal word "Type" from this row entirely in
+// the PDF's text layer — so the middle of the row is matched loosely up to
+// "Account Status" rather than requiring an exact "Account Type X" phrase.
+// The lender + product name is instead read whole from the clean header
+// line above this row (e.g. "PUNJAB NATIONAL BANK Loan Against Bank
+// Deposits"), which isn't affected by that wrap.
+const acctHeaderRegexI = /\n([A-Za-z0-9&.,'()\/\- ]{3,90}?)\nAccount Number\s+(\S+)\s*\|[\s\S]{0,70}?Account Status\s+(\S[\w \-]*?)\s*\n/g;
+
+function extractFieldsI(block){
+  const out = {};
+  let m;
+  fieldRegexI.lastIndex = 0;
+  while ((m = fieldRegexI.exec(block)) !== null){
+    const key = clean(m[1]);
+    let val = clean(m[2]);
+    if (/^-+$/.test(val) || val === '.') val = '';
+    if (NUMERIC_I.has(key) && val){
+      const numMatch = val.replace('₹','').trim().match(/^-?[\d,]+(\.\d+)?/);
+      val = numMatch ? numMatch[0] : val;
+    }
+    if (!(key in out)) out[key] = val;
+  }
+  return out;
+}
+
+function parseFormatI(text){
+  parsedAccounts = [];
+  parsedEnquiries = [];
+
+  if (!/CHM Ref\.\s*No/i.test(text) || !/Account Type\s+\S.*\|\s*Account Status/i.test(text)) return;
+
+  reportMeta.bureau = 'CRIF High Mark (via Goodscore)';
+
+  const nameMatch = text.match(/\bHey\s+([A-Z][A-Za-z .]+?)\s*\n/);
+  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+
+  const scoreMatch = text.match(/Your Score is\s*\n?\s*(\d{3})\b/i);
+  reportMeta.score = scoreMatch ? scoreMatch[1] : '';
+
+  const norm = normalizeWrappedLabelsI(text);
+  acctHeaderRegexI.lastIndex = 0;
+  const matches = [];
+  let hm;
+  while ((hm = acctHeaderRegexI.exec(norm)) !== null) matches.push(hm);
+
+  matches.forEach((m, i) => {
+    const lenderAndType = clean(m[1]);
+    const status0 = clean(m[3]);
+
+    const blockStart = m.index + m[0].length;
+    const blockEnd = i + 1 < matches.length ? matches[i+1].index : norm.length;
+    let block = norm.substring(blockStart, blockEnd);
+    const stopIdx = block.indexOf('Payment History');
+    if (stopIdx !== -1) block = block.substring(0, stopIdx);
+
+    const f = extractFieldsI(block);
+    const balanceRaw = f['Current Balance'] || '';
+    const balanceNum = balanceRaw === '' ? '' : (parseFloat(balanceRaw.replace(/,/g,'')) || 0);
+    const closedVal = (f['Closed Date'] || '').split(/\s+/)[0] || '';
+    const overdue = f['Overdue Amount'] || '';
+    let status = /closed/i.test(status0) ? 'Closed' : 'Active';
+    if (overdue && parseFloat(overdue.replace(/,/g,'')) > 0) status = 'Active — OVERDUE ₹' + overdue;
+
+    parsedAccounts.push({
+      idx: i + 1, type: lenderAndType, ownership: f['Ownership'] || '',
+      opened: f['Disbursed Date'] || '', closed: closedVal,
+      sanctioned: f['Disbursed Amount'] || '',
+      balance: balanceRaw, balanceNum,
+      emi: f['Installment Amt'] || '',
+      limit: [f['Credit Limit'], f['Cash Limit']].filter(Boolean).join(' / '),
+      interest: f['Interest Rate'] || '', tenure: f['Repayment Tenure'] || '', status
+    });
+  });
+
+  const summAccts = text.match(/Primary Number Of Accounts\s+(\d+)/);
+  reportMeta.totalAccounts = summAccts ? summAccts[1] : String(parsedAccounts.length);
+  reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
+
+  // "Credit Enquiries" section: a plain table, one clean row per line —
+  // "{LENDER} {DD-MM-YYYY} {Purpose} {Ownership Type} {Amount} {Remark}",
+  // e.g. "LNT FINANCE 12-06-2026 Consumer Loan PRIMARY 15,000 -". Prints
+  // only the heading/description text with no rows when there are none.
+  const enqSection = text.match(/Credit Enquiries([\s\S]*?)(?:Report Date:|Summary: All Accounts|$)/i);
+  if (enqSection){
+    const enqRowRegex = /\n([A-Z][A-Z0-9&.,'\-\/ ]*?)\s+(\d{2}-\d{2}-\d{4})\s+([A-Za-z][A-Za-z \/]*?)\s+(PRIMARY|SECONDARY|JOINT|GUARANTOR|SUPPLEMENTARY)\s+([\d,]+|-)\s+(-|[^\n]*)\n/g;
+    let em;
+    while ((em = enqRowRegex.exec(enqSection[1])) !== null){
+      parsedEnquiries.push({ date: em[2], purpose: clean(em[1]) + ' — ' + clean(em[3]), amount: em[5] === '-' ? '' : em[5] });
+    }
+  }
+}
+
 // Format H — myscore.cibil.com's "CreditView" Overview/Summary dashboard
 // export (URL fingerprint: .../CreditView/creditreport_newUXP.page). This is
 // a 4-page aggregate-counts summary — Score, Open/Closed account counts,
@@ -2431,16 +2654,16 @@ function parseFormatE(text){
 const BAND_LABELS = ['Poor','Fair','Good','Very Good','Excellent'];
 const BAND_COLORS = {'Poor':'#DC2626','Fair':'#F59E0B','Good':'#84CC16','Very Good':'#16A34A','Excellent':'#0B7A6E'};
 
-// breakpoints has 4 ascending values splitting the 5 bands. If `inverse` is
-// true, a LOWER value is better (e.g. utilization, enquiry count).
-// The CIBIL Score itself uses a simple 3-tier band — Poor below 700, Fair
-// 700–749, Excellent 750+ — kept separate from the generic metric-card
-// bandOf() below (which powers Repayment History/Utilization/etc. and uses
-// its own metric-appropriate thresholds, not the score's 300–900 scale).
+// CIBIL Score bands — standard 5-tier scale used across Indian lenders:
+//   300–549  Poor        550–649  Fair       650–749  Good
+//   750–799  Very Good   800–900  Excellent
+// Kept in the same BAND_LABELS/BAND_COLORS set as the other metric cards
+// (Repayment History, Utilization, etc.) below, so the gauge, the band
+// pill under the score, and the legend all use one consistent scheme.
+const CIBIL_BAND_BREAKS = [549, 649, 749, 799]; // 4 breakpoints -> 5 bands
 function cibilScoreBand(score){
-  if (score < 700) return 'Poor';
-  if (score < 750) return 'Fair';
-  return 'Excellent';
+  for (let i=0;i<CIBIL_BAND_BREAKS.length;i++){ if (score <= CIBIL_BAND_BREAKS[i]) return BAND_LABELS[i]; }
+  return BAND_LABELS[4];
 }
 
 function bandOf(value, breakpoints, inverse){
@@ -2558,26 +2781,40 @@ function metricCardHtml(label, valueText, band){
 }
 
 function gaugeSvg(score){
-  // Semicircular arc gauge, 300–900 range, with a proper needle (pivot hub
-  // + line + tip dot) rather than just a floating dot marker — a bare dot
-  // read as "meter missing" since it barely showed against the arc.
+  // Semicircular arc gauge, 300–900 range, drawn as 5 solid colour segments
+  // matching the standard CIBIL score bands (Poor/Fair/Good/Very Good/
+  // Excellent) rather than one continuous gradient. Two reasons for the
+  // switch: (1) it now matches BAND_COLORS used everywhere else in this
+  // dashboard instead of an unrelated red→amber→green→teal gradient, and
+  // (2) the previous gradient lived in a <defs> block with a fixed id
+  // ("rdGaugeGrad") that's duplicated every time this function runs (once
+  // for the live Step-1 meter, again for the Step-2 dashboard) — with that
+  // element sitting inside a display:none container half the time, some
+  // mobile browsers refused to resolve the url(#rdGaugeGrad) paint
+  // reference at all, so the arc silently rendered invisible while the
+  // (solid-colour) needle stayed visible. Solid per-segment strokes need no
+  // shared id, so this can't recur.
   const min=300, max=900;
   const pct = Math.max(0, Math.min(1, (score-min)/(max-min)));
   const angle = Math.PI * (1 - pct); // 180deg(left,300) -> 0deg(right,900)
   const cx=85, cy=88, r=68;
   const needleLen = r - 12;
   const tipX = cx + needleLen*Math.cos(angle), tipY = cy - needleLen*Math.sin(angle);
+
+  const bounds = [min, ...CIBIL_BAND_BREAKS, max]; // [300,549,649,749,799,900]
+  const ptOnArc = (v) => {
+    const p = Math.max(0, Math.min(1, (v-min)/(max-min)));
+    const a = Math.PI * (1 - p);
+    return { x: (cx + r*Math.cos(a)).toFixed(2), y: (cy - r*Math.sin(a)).toFixed(2) };
+  };
+  const segments = BAND_LABELS.map((label, i) => {
+    const p1 = ptOnArc(bounds[i]), p2 = ptOnArc(bounds[i+1]);
+    return `<path d="M${p1.x},${p1.y} A${r},${r} 0 0 1 ${p2.x},${p2.y}" fill="none" stroke="${BAND_COLORS[label]}" stroke-width="12" stroke-linecap="butt"/>`;
+  }).join('');
+
   return `
     <svg viewBox="0 0 170 100">
-      <defs>
-        <linearGradient id="rdGaugeGrad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="#DC2626"/>
-          <stop offset="35%" stop-color="#F59E0B"/>
-          <stop offset="65%" stop-color="#84CC16"/>
-          <stop offset="100%" stop-color="#0B7A6E"/>
-        </linearGradient>
-      </defs>
-      <path d="M17,88 A68,68 0 0 1 153,88" fill="none" stroke="url(#rdGaugeGrad)" stroke-width="12" stroke-linecap="round"/>
+      ${segments}
       <line x1="${cx}" y1="${cy}" x2="${tipX.toFixed(1)}" y2="${tipY.toFixed(1)}" stroke="#123A63" stroke-width="3.5" stroke-linecap="round"/>
       <circle cx="${tipX.toFixed(1)}" cy="${tipY.toFixed(1)}" r="4" fill="#123A63"/>
       <circle cx="${cx}" cy="${cy}" r="7" fill="#123A63" stroke="#fff" stroke-width="2.5"/>
@@ -2624,6 +2861,13 @@ function renderRiskDashboard(){
           ${reportMeta.scoreSource === 'ocr' ? `<div class="rd-ocr-caveat">* read via image OCR — verify vs PDF p.${reportMeta.scorePageNum||1}</div>` : ''}
         </div>
         <div class="rd-scale"><span>300</span><span>900</span></div>
+        <div class="rd-gauge-legend">
+          ${BAND_LABELS.map((label, i) => {
+            const lo = i === 0 ? 300 : CIBIL_BAND_BREAKS[i-1] + 1;
+            const hi = i === BAND_LABELS.length - 1 ? 900 : CIBIL_BAND_BREAKS[i];
+            return `<div class="rd-legend-row"><span class="rd-legend-swatch" style="background:${BAND_COLORS[label]};"></span><span class="rd-legend-label">${label}</span><span class="rd-legend-range">${lo}–${hi}</span></div>`;
+          }).join('')}
+        </div>
       </div>
       <div class="rd-applicant">
         <div class="rd-name">${consumerName || 'Consumer'}</div>
