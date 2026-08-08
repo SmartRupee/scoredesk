@@ -1,0 +1,24 @@
+# OS-generated clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor/IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# If you ever add build tooling later
+node_modules/
+npm-debug.log*
+dist/
+
+# Local secrets / environment files — this project shouldn't need any
+# (everything runs client-side), but ignore them by default just in case
+.env
+.env.local
+
+# Sample Excel exports generated while testing — these are output, not
+# source, so don't commit them by accident
+*.xlsx
