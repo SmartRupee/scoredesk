@@ -1790,7 +1790,25 @@ function parseFormatA(text){
   parsedAccounts = [];
   parsedEnquiries = [];
 
-  const nameMatch = text.match(/\bNAME:\s*([A-Z][A-Z .\/]+?)\s+DATE OF BIRTH/) || text.match(/CONSUMER:\s*([A-Z .]+?)\s+MEMBER ID/);
+  reportMeta.bureau = 'TransUnion CIBIL';
+
+  // Name extraction has multiple fallbacks because this layout's header
+  // block (Consumer / Member ID / Reference Number) is a 2-column table
+  // whose PDF text layer sometimes prints the consumer's name BEFORE the
+  // literal "CONSUMER:" label (row-interleaved with the neighbouring
+  // column) rather than after it — so anchoring only on text that follows
+  // a label can miss a name a different text-extraction engine ordered
+  // differently. The clean, single-column "NAME: X" line under
+  // "CONSUMER INFORMATION:" further down the page is more reliable and
+  // tried first; the broader "take the line" fallback doesn't require an
+  // exact trailing phrase like "DATE OF BIRTH" in case that, too, ends up
+  // on a different line than expected.
+  const nameMatch =
+    text.match(/\bNAME:\s*([A-Z][A-Z .\/]+?)\s*\n\s*DATE OF BIRTH/) ||
+    text.match(/\bNAME:\s*([A-Z][A-Z .\/]{2,80}?)\r?\n/) ||
+    text.match(/CONSUMER:\s*([A-Z][A-Z .\/]+?)\s+MEMBER ID/) ||
+    text.match(/CONSUMER:\s*([A-Z][A-Z .\/]{2,80}?)\r?\n/) ||
+    text.match(/\n([A-Z][A-Z .\/]{4,80})\r?\n\s*CONSUMER:\s*\r?\n/);
   consumerName = nameMatch ? clean(nameMatch[1]) : '';
 
   const scoreMatch = text.match(/(\d{3,5})\s*CREDITVISION/) || text.match(/CREDITVISION[^\d]*(\d{3,5})/);
@@ -1840,10 +1858,15 @@ function parseFormatA(text){
 
   if (enquiryCutIdx !== -1){
     const enqSection = text.substring(enquiryCutIdx, text.indexOf('END OF REPORT') !== -1 ? text.indexOf('END OF REPORT') : text.length);
-    const enqRegex = /NOT DISCLOSED\s+(\d{2}-\d{2}-\d{4})\s+([A-Za-z0-9\-–()\s&]*?)\s+([\d,]+)(?=\s+NOT DISCLOSED|\s*$)/g;
+    // Anchored on the DATE in the middle of each row rather than a fixed
+    // "NOT DISCLOSED" member-name prefix — some rows carry a real member
+    // name instead (e.g. a specific lender), which the old prefix-anchored
+    // regex silently skipped, undercounting enquiries against the report's
+    // own stated total.
+    const enqRegex = /\n(\S+(?:\s+\S+)?)\s+(\d{2}-\d{2}-\d{4})\s+(.+?)\s+([\d,]+)(?=\n|$)/g;
     let em;
     while ((em = enqRegex.exec(enqSection)) !== null){
-      parsedEnquiries.push({ date: em[1], purpose: clean(em[2]), amount: em[3] });
+      parsedEnquiries.push({ date: em[2], purpose: clean(em[3]), amount: em[4] });
     }
   }
 }
@@ -2211,7 +2234,7 @@ function extractFieldsD(block){
 // back apart below — this is what recovers the lender name (not available
 // anywhere else as clean text) and avoids the empty "Loan Type" that
 // resulted from that same wrapping inside the field table itself.
-const acctHeaderRegexD2 = /\n([A-Z][A-Z\/ ]{2,30}?)\s+([A-Za-z][A-Za-z0-9&.,'\-\/ ]{2,60}?)\s+Acct\s+(\d+)\n/g;
+const acctHeaderRegexD2 = /\n([A-Z][A-Z\/\- ]{2,30}?)\s+([A-Za-z][A-Za-z0-9&.,'\-\/ ]{2,60}?)\s+(?:[✓✔]\s+)?Acct\s+(\d+)\n/g;
 
 function parseFormatD(text){
   parsedAccounts = [];
@@ -2221,7 +2244,11 @@ function parseFormatD(text){
 
   reportMeta.bureau = 'Experian';
 
-  const nameMatch = text.match(/\bName\s+([A-Z][A-Za-z .]+?)\s*\n/i);
+  // "Name" prints with or without a trailing colon depending on which
+  // Experian-data reseller generated the PDF (seen so far: bare "Name X"
+  // from Experian's own export, "Name: X" from a white-label reseller
+  // skin) — tolerate either.
+  const nameMatch = text.match(/\bName:?\s+([A-Z][A-Za-z .]+?)\s*\n/i);
   consumerName = nameMatch ? clean(nameMatch[1]) : '';
 
   // The score box ("YOUR EXPERIAN / CREDIT SCORE / 547 / Range: 300 – 900")
@@ -2229,12 +2256,15 @@ function parseFormatD(text){
   // text layer interleaves them line-by-line — a naive "CREDIT SCORE ... 3
   // digits within N chars" match easily lands on the unrelated "ranges from
   // 300 - 900" sentence instead (a real bug seen in testing: showed 300
-  // instead of the actual 547). Anchoring on a 3-digit number that sits
-  // completely alone on its own line, within the score section only, avoids
-  // that — every other number in this section has surrounding text on the
-  // same line except the score itself.
+  // instead of the actual 547). Anchoring on a 3-digit number that starts a
+  // line and isn't immediately followed by "- 900" (the range mention)
+  // avoids that. Originally this also required the number to end its own
+  // line, but a reseller skin of this same report layout wraps a trailing
+  // "3. Coverage: ..." onto the same line as the score ("750 3. Coverage"),
+  // so that's no longer required — starting a line is discriminating enough
+  // on its own within this narrowed section.
   const scoreSection = text.match(/EXPERIAN CREDIT SCORE([\s\S]*?)(?:REPORT SUMMARY|SUMMARY: CREDIT ACCOUNT|$)/i);
-  const scoreMatch = scoreSection && scoreSection[1].match(/\n\s*(\d{3})\s*\n/);
+  const scoreMatch = scoreSection && scoreSection[1].match(/\n(\d{3})\b(?!\s*-\s*\d)/);
   reportMeta.score = scoreMatch ? scoreMatch[1] : '';
 
   acctHeaderRegexD2.lastIndex = 0;
@@ -2750,13 +2780,18 @@ function parseFormatE(text){
   parsedEnquiries = [];
   reportMeta.genericFallback = true;
 
-  const bureauMatch = text.match(/TransUnion\s*CIBIL|Experian|Equifax|CRIF\s*High\s*Mark|High\s*Mark/i);
+  const bureauMatch = text.match(/TransUnion\s*CIBIL|Experian|Equifax|CRIF\s*High\s*Mark|High\s*Mark|Goodscore|Oolka/i);
   reportMeta.bureau = bureauMatch ? bureauMatch[0] : 'Unrecognized bureau';
 
   const nameMatch = text.match(/\b(?:Name\s*){1,8}[:\-]?\s*\n?\s*([A-Z][A-Za-z .\/]{2,45})/i);
   consumerName = nameMatch ? clean(nameMatch[1]) : '';
 
-  const scoreMatch = text.match(/Score\D{0,15}(\d{3})\b/i);
+  // Avoid the "- 900" range trap seen in Experian-family layouts (a score
+  // box like "547" sitting near a sentence mentioning "ranges from 300 -
+  // 900" can make a naive "digits near the word Score" match grab 300
+  // instead of the real score) by rejecting a match immediately followed
+  // by a dash and another number.
+  const scoreMatch = text.match(/Score\D{0,15}(\d{3})\b(?!\s*[-–]\s*\d)/i);
   reportMeta.score = scoreMatch ? scoreMatch[1] : '';
 
   const anchorRegex = /(Account Type|Type of Account|Type of Loan|Nature of Facility|Facility Type|Loan Type)\s*[:\-]?\s*/gi;
