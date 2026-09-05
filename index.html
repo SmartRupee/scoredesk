@@ -240,6 +240,19 @@
   .rd-flag-detail{font-size:12.5px; color:#5B7A99; margin-top:2px;}
   .rd-disclaimer{margin-top:14px; font-size:11.5px; color:#9AAAB8; line-height:1.5;}
 
+  .rd-improve{margin-top:22px; padding-top:20px; border-top:1px dashed var(--line);}
+  .rd-improve h4{margin:0 0 14px; font-size:13.5px; color:var(--navy);}
+  .rd-chart-wrap{background:#F7FBFC; border:1px solid var(--line); border-radius:var(--radius-sm); padding:16px; margin-bottom:14px;}
+  .rd-suggest-list{display:flex; flex-direction:column; gap:9px; margin-bottom:14px;}
+  .rd-suggest-item{font-size:13px; line-height:1.55; color:var(--ink); background:#fff; border:1px solid var(--line); border-radius:var(--radius-sm); padding:11px 13px;}
+  .rd-verdict{border-radius:var(--radius-sm); padding:16px; border:1px solid var(--line);}
+  .rd-verdict-title{font-weight:800; font-size:14.5px; margin-bottom:6px;}
+  .rd-verdict-body{font-size:13px; line-height:1.6; color:#3A4550;}
+  .rd-verdict-poor{background:#FEF2F2; border-color:#FECACA;} .rd-verdict-poor .rd-verdict-title{color:#B91C1C;}
+  .rd-verdict-fair{background:#FFFBEB; border-color:#FDE68A;} .rd-verdict-fair .rd-verdict-title{color:#92400E;}
+  .rd-verdict-good{background:#F7FDF4; border-color:#BBF7D0;} .rd-verdict-good .rd-verdict-title{color:#166534;}
+  .rd-verdict-excellent{background:#F0FDFA; border-color:#99F6E4;} .rd-verdict-excellent .rd-verdict-title{color:#0B7A6E;}
+
   /* ---------- Scan summary: status chips + process-flow strip ---------- */
   .scan-summary{
     display:flex; flex-direction:column; gap:14px; margin-bottom:18px;
@@ -1442,6 +1455,18 @@ async function handleFile(file){
     if (requestId !== currentRequestId) return; // superseded by a newer upload
     setStatus('Parsing loan accounts…');
     updateProgress(0.88);
+    // Some myscore.cibil.com exports (the "creditReportPrint.page" URL,
+    // used when printing/saving the report to PDF from the browser) stamp
+    // a running "{timestamp} CIBIL Report" + page-URL footer on EVERY
+    // page. Since account/personal-detail fields can straddle a page
+    // break, this footer text lands right in the middle of a field —
+    // e.g. an account's "Ownership" value coming out as the footer's URL
+    // instead of "Individual"/"Joint". It's the same handful of lines
+    // repeated verbatim once per page, so it's safe to strip everywhere.
+    fullText = fullText.replace(
+      /\n*\d{1,2}\/\d{1,2}\/\d{2,4},?\s*\d{1,2}:\d{2}\s*[AP]M\s*CIBIL Report\n*https:\/\/myscore\.cibil\.com\/CreditView\/creditReportPrint\.page\?enterprise=CIBIL\s*\d+\/\d+\n*/g,
+      '\n'
+    );
     parseReport(fullText);
 
     // Score gauge OCR fallback — applies to ANY format/layout, not just
@@ -1518,12 +1543,26 @@ function clean(s){
   return (s || '').replace(/\s+/g, ' ').trim();
 }
 
+// Several report layouts print a salutation ahead of the consumer's actual
+// name in the "NAME:"/"Name" field (e.g. "NAME: MR PANDURANG DHONDU TAWTE"),
+// which the name-extraction regexes above happily include since they only
+// anchor on "starts with a capital letter". Strip it here, in one shared
+// place, rather than teaching every format's regex about salutations —
+// keeps the fix consistent across formats and easy to extend if a new
+// salutation shows up. Only strips a LEADING title, so it can't accidentally
+// eat a real name that happens to contain one of these words later on.
+const NAME_TITLES = /^(?:MR|MRS|MS|MISS|DR|SHRI|SMT|SMTI|KUM|SH|LT COL|COL|MAJ|CAPT|PROF)\.?\s+/i;
+function stripTitle(name){
+  return (name || '').replace(NAME_TITLES, '').trim();
+}
+
 const LABELS = [
   "MEMBER NAME","ACCOUNT NUMBER","COLLATERAL TYPE","COLLATERAL VALUE",
   "REPORTED AND CERTIFIED","PMT HIST START","PMT HIST END","LAST PAYMENT",
   "REPAYMENT TENURE","INTEREST RATE","ACTUAL PAYMENT","CREDIT LIMIT",
   "CASH LIMIT","CURRENT BALANCE","HIGH CREDIT","SANCTIONED","OWNERSHIP",
-  "PMT FREQ","OVERDUE","OPENED","CLOSED","EMI","TYPE"
+  "PMT FREQ","OVERDUE","OPENED","CLOSED","EMI","TYPE",
+  "WRITTEN OFF /SETTLED STATUS","SUIT FILED /WILFUL DEFAULT"
 ];
 const labelAlt = LABELS.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
 const fieldRegex = new RegExp(`(${labelAlt})\\s*:\\s*([\\s\\S]*?)(?=(?:${labelAlt})\\s*:|DAYS PAST DUE|$)`, 'g');
@@ -1544,7 +1583,8 @@ const ENQUIRY_PURPOSES = [
   "Business Loan – Secured","Business Loan - Secured",
   "Business Loan – General","Business Loan - General",
   "Personal Loan","Consumer Loan","Credit Card","Housing Loan","Property Loan",
-  "Two-wheeler Loan","Two Wheeler Loan","Auto Loan","Gold Loan","Overdraft","Other"
+  "Two-wheeler Loan","Two Wheeler Loan","Auto Loan","Gold Loan","Overdraft","Other",
+  "Microfinance – Housing Loan","Microfinance - Housing Loan"
 ];
 const enquiryPurposeAlt = [...ENQUIRY_PURPOSES].sort((a,b)=>b.length-a.length)
   .map(p => p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/\s+/g,'\\s+')).join('|');
@@ -1631,6 +1671,26 @@ function parseLabeledEnquiries(sectionText){
   return out;
 }
 
+// Same idea as parseLabeledEnquiries above, but for a layout where each
+// label sits on the SAME line as its value — "Member Name ANANDRATHIGFL",
+// "Date Of Enquiry 24/08/2026", "Enquiry Purpose Property Loan" — rather
+// than the value on its own line below the label. Kept as a separate
+// strategy (rather than just relaxing the newline requirement in
+// parseLabeledEnquiries) because loosening that one caused it to
+// mis-capture rows in the newline-separated layout it was built for.
+function parseLabeledEnquiriesInline(sectionText){
+  const re = new RegExp(
+    `Member Name\\s+([A-Z][A-Z0-9 .&\\-]+?)\\s*\\n+\\s*Date Of Enquiry\\s+(\\d{2}\\/\\d{2}\\/\\d{4})\\s*\\n+\\s*Enquiry Purpose\\s+(${enquiryPurposeAlt})`,
+    'gi'
+  );
+  const out = [];
+  let m;
+  while ((m = re.exec(sectionText)) !== null){
+    out.push({ date: m[2], purpose: clean(m[1]) + ' — ' + clean(m[3]), amount: '' });
+  }
+  return out;
+}
+
 function extractFields(block){
   const out = {};
   let m;
@@ -1657,6 +1717,11 @@ function extractReportDate(text){
   let m = text.match(/Date:\s*(\d{1,2})\s+([A-Za-z]+),?\s+(\d{4})/);
   if (m){
     const d = new Date(`${m[2]} ${m[1]}, ${m[3]}`);
+    if (!isNaN(d)) return d;
+  }
+  m = text.match(/\bDATE:\s*(\d{2})[\/\-](\d{2})[\/\-](\d{4})/i);
+  if (m){
+    const d = new Date(+m[3], +m[2]-1, +m[1]);
     if (!isNaN(d)) return d;
   }
   m = text.match(/\b(\d{2})[\/\-](\d{2})[\/\-](\d{4})\b/);
@@ -1809,12 +1874,16 @@ function parseFormatA(text){
     text.match(/CONSUMER:\s*([A-Z][A-Z .\/]+?)\s+MEMBER ID/) ||
     text.match(/CONSUMER:\s*([A-Z][A-Z .\/]{2,80}?)\r?\n/) ||
     text.match(/\n([A-Z][A-Z .\/]{4,80})\r?\n\s*CONSUMER:\s*\r?\n/);
-  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+  consumerName = nameMatch ? stripTitle(clean(nameMatch[1])) : '';
 
-  const scoreMatch = text.match(/(\d{3,5})\s*CREDITVISION/) || text.match(/CREDITVISION[^\d]*(\d{3,5})/);
+  const scoreMatch =
+    text.match(/CIBIL TRANSUNION SCORE\s*\n?\s*VERSION\s*[\d.]+\s*(\d{3,4})\b/i) ||
+    text.match(/(\d{3,5})\s*CREDITVISION/) ||
+    text.match(/CREDITVISION[^\d]*(\d{3,5})/);
   reportMeta.score = scoreMatch ? scoreMatch[1].replace(/^0+/, '') : '';
 
-  const totalMatch = text.match(/All Accounts\s*TOTAL:\s*(\d+)/);
+  const totalMatch = text.match(/All Accounts\s*TOTAL:\s*(\d+)/) ||
+    text.match(/TOTAL:\s*(\d+)[\s\S]{0,80}?All Accounts/);
   reportMeta.totalAccounts = totalMatch ? totalMatch[1] : '';
 
   const zeroBalMatch = text.match(/ZERO-BALANCE:\s*(\d+)/);
@@ -1847,6 +1916,12 @@ function parseFormatA(text){
 
     let status = closedVal ? 'Closed' : 'Active';
     if (overdue && parseFloat(overdue.replace(/,/g,'')) > 0) status = 'Active — OVERDUE ₹' + overdue;
+    const writeOffField = (f['WRITTEN OFF /SETTLED STATUS'] || '').toUpperCase();
+    if (/WRITTEN.OFF/.test(writeOffField)){
+      status = 'Written-off' + (status.includes('OVERDUE') ? ' — ' + status.replace('Active — ','') : '');
+    } else if (/SETTLED/.test(writeOffField)){
+      status = 'Settled' + (status.includes('OVERDUE') ? ' — ' + status.replace('Active — ','') : '');
+    }
 
     parsedAccounts.push({
       idx: idx + 1, type, ownership, opened, closed: closedVal,
@@ -1967,7 +2042,7 @@ function parseFormatB(text){
   parsedEnquiries = [];
 
   const nameMatch = text.match(/(?<!Member )\bName\s*:?\s*([A-Z][A-Za-z .\/]+?)\s*(?:\n\s*)?(?:DOB|Date Of Birth)/i);
-  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+  consumerName = nameMatch ? stripTitle(clean(nameMatch[1])) : '';
   if (!consumerName){
     // Some exports print "Name / DOB / Gender" as a row of labels first,
     // then the three matching values below as a second row (a table read
@@ -1975,7 +2050,7 @@ function parseFormatB(text){
     // ...\n05/05/1986\nFemale". The pattern above expects the value right
     // after its own label and misses this layout entirely.
     const colMatch = text.match(/\bName\s*\n+\s*(?:DOB|Date Of Birth)\s*\n+\s*Gender\s*\n+\s*([A-Z][A-Za-z .\/]+?)\s*\n+\s*\d{2}\/\d{2}\/\d{4}\s*\n+\s*(?:Male|Female|Other)\b/i);
-    if (colMatch) consumerName = clean(colMatch[1]);
+    if (colMatch) consumerName = stripTitle(clean(colMatch[1]));
   }
 
   let scoreMatch = text.match(/CIBIL Score is (\d{3})/i);
@@ -2074,25 +2149,33 @@ function parseFormatB(text){
     while ((em = enqRegex.exec(flat)) !== null){
       parsedEnquiries.push({ date: em[2], purpose: clean(em[1]) + ' — ' + clean(em[3]), amount: '' });
     }
-    // The simple flatten-and-match approach above assumes each row's lender
-    // name and purpose sit on one line. When a narrow column has wrapped
-    // them across several lines instead (common in phone-screenshot PDFs,
-    // especially OCR'd ones), flattening interleaves the wrapped lender
-    // fragment between the purpose words, and the match above can silently
-    // catch only a partial, sometimes-wrong subset — there's no reliable
-    // "it clearly failed" signal to gate on, so always compare against the
-    // wrap-aware reconstruction and keep whichever recovers more full rows.
-    const recovered = parseWrappedEnquiries(enqSectionMatch[0]);
-    if (recovered.length > parsedEnquiries.length){
-      parsedEnquiries = recovered.map(r => ({ date: r.date, purpose: r.lender + ' — ' + r.purpose, amount: '' }));
-    }
-    // A third layout prints each enquiry as its own fully-labeled block —
-    // "Member Name\n{lender}\nDate Of Enquiry\n{date}\nEnquiry Purpose
-    // \n{purpose}" repeated per row, rather than a flat table (seen under
-    // an "ENQUIRY DETAILS" heading). Try this too and keep it if it wins.
+    // Two layouts print each enquiry as its own fully-labeled block —
+    // "Member Name {lender} / Date Of Enquiry {date} / Enquiry Purpose
+    // {purpose}" repeated per row (seen under an "ENQUIRY DETAILS"
+    // heading) — either with the value on its own line below the label,
+    // or on the same line as the label. Because these require the exact
+    // literal labels to be present to match at all, a match from either
+    // is far more trustworthy than a heuristic reconstruction — prefer
+    // whichever of the two finds more, over anything else, whenever
+    // either finds something.
     const labeled = parseLabeledEnquiries(enqSectionMatch[0]);
-    if (labeled.length > parsedEnquiries.length){
-      parsedEnquiries = labeled;
+    const labeledInline = parseLabeledEnquiriesInline(enqSectionMatch[0]);
+    const bestLabeled = labeledInline.length > labeled.length ? labeledInline : labeled;
+    if (bestLabeled.length > 0){
+      parsedEnquiries = bestLabeled;
+    } else {
+      // Neither labeled layout matched anything — this is likely the flat
+      // table layout instead, where a narrow column (common in
+      // phone-screenshot PDFs, especially OCR'd ones) has wrapped the
+      // lender name across several lines. Flattening interleaves that
+      // wrapped fragment between the purpose words, so the flat match
+      // above can silently catch only a partial, sometimes-wrong subset —
+      // compare against the wrap-aware reconstruction and keep whichever
+      // recovers more full rows.
+      const recovered = parseWrappedEnquiries(enqSectionMatch[0]);
+      if (recovered.length > parsedEnquiries.length){
+        parsedEnquiries = recovered.map(r => ({ date: r.date, purpose: r.lender + ' — ' + r.purpose, amount: '' }));
+      }
     }
   }
 
@@ -2137,7 +2220,7 @@ function parseFormatC(text){
   parsedEnquiries = [];
 
   const nameMatch = text.match(/\bHey\s+([A-Z][A-Za-z .]+?),/);
-  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+  consumerName = nameMatch ? stripTitle(clean(nameMatch[1])) : '';
 
   const scoreMatch = text.match(/Powered by\s*\n*\s*(\d{3})\b/);
   reportMeta.score = scoreMatch ? scoreMatch[1] : '';
@@ -2249,7 +2332,7 @@ function parseFormatD(text){
   // from Experian's own export, "Name: X" from a white-label reseller
   // skin) — tolerate either.
   const nameMatch = text.match(/\bName:?\s+([A-Z][A-Za-z .]+?)\s*\n/i);
-  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+  consumerName = nameMatch ? stripTitle(clean(nameMatch[1])) : '';
 
   // The score box ("YOUR EXPERIAN / CREDIT SCORE / 547 / Range: 300 – 900")
   // sits beside a "Score Factors" list in a 2-column layout, so the PDF's
@@ -2365,7 +2448,7 @@ function parseFormatF(text){
     // Cut at the first repeated word instead of keeping the garbled tail.
     const words = clean(nameMatch[1]).split(' ');
     const dupeAt = words.findIndex((w, i) => i > 0 && w === words[0]);
-    consumerName = (dupeAt > 0 ? words.slice(0, dupeAt) : words).join(' ');
+    consumerName = stripTitle((dupeAt > 0 ? words.slice(0, dupeAt) : words).join(' '));
   } else {
     consumerName = '';
   }
@@ -2501,7 +2584,7 @@ function parseFormatG(text){
   if (!/ACCOUNT CONDITION/.test(text) || !/Member Name\s*:/.test(text)) return;
 
   const nameMatch = text.match(/NAME\s+DATE OF BIRTH\s+GENDER\s+([A-Z][A-Z .\/]+?)\s+\d{1,2}-[A-Za-z]{3}-\d{4}/);
-  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+  consumerName = nameMatch ? stripTitle(clean(nameMatch[1])) : '';
 
   // The CIBIL Score gauge in this layout is a drawn image, not text — it
   // can't be reliably recovered from the PDF's text layer (OCR on this
@@ -2652,7 +2735,7 @@ function parseFormatI(text){
   reportMeta.bureau = 'CRIF High Mark (via Goodscore)';
 
   const nameMatch = text.match(/\bHey\s+([A-Z][A-Za-z .]+?)\s*\n/);
-  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+  consumerName = nameMatch ? stripTitle(clean(nameMatch[1])) : '';
 
   const scoreMatch = text.match(/Your Score is\s*\n?\s*(\d{3})\b/i);
   reportMeta.score = scoreMatch ? scoreMatch[1] : '';
@@ -2733,7 +2816,7 @@ function parseFormatH(text){
   if (!/creditreport_newUXP|myscore\.cibil\.com\/CreditView/i.test(text)) return false;
 
   const nameMatch = text.match(/\b(?:Name\s*){1,8}[:\-]?\s*\n?\s*([A-Z][A-Za-z .\/]{2,50}?)\s*\n\s*\b(?:Address\s*){1,8}\b/i);
-  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+  consumerName = nameMatch ? stripTitle(clean(nameMatch[1])) : '';
 
   const scoreMatch = text.match(/\b(?:Score\s*){1,8}[:\-]?\s*\n?\s*(\d{3})\b/i);
   reportMeta.score = scoreMatch ? scoreMatch[1] : '';
@@ -2784,7 +2867,7 @@ function parseFormatE(text){
   reportMeta.bureau = bureauMatch ? bureauMatch[0] : 'Unrecognized bureau';
 
   const nameMatch = text.match(/\b(?:Name\s*){1,8}[:\-]?\s*\n?\s*([A-Z][A-Za-z .\/]{2,45})/i);
-  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+  consumerName = nameMatch ? stripTitle(clean(nameMatch[1])) : '';
 
   // Avoid the "- 900" range trap seen in Experian-family layouts (a score
   // box like "547" sitting near a sentence mentioning "ranges from 300 -
@@ -2916,7 +2999,7 @@ function computeDashboard(){
   // report's own date (not today's) — see extractReportDate above.
   const openedDates = parsedAccounts.map(a => parseFlexDate(a.opened)).filter(Boolean);
   const creditAgeYears = openedDates.length
-    ? (asOf - Math.min(...openedDates)) / (365.25*24*3600*1000)
+    ? Math.max(0, (asOf - Math.min(...openedDates)) / (365.25*24*3600*1000))
     : null;
 
   // Enquiry frequency: hard enquiries in the 6 months before the report date.
@@ -2957,7 +3040,21 @@ function computeDashboard(){
 
   return {
     asOf, total, repaymentPct, utilizationPct, creditAgeYears, enqRecent,
-    creditMixCount: mixSet.size, flags
+    creditMixCount: mixSet.size, flags,
+    // Raw figures kept alongside the derived percentages/bands above so the
+    // Score Improvement Plan can quote concrete rupee amounts and account
+    // counts instead of vague advice — e.g. "pay down ₹X" rather than just
+    // "utilization is high".
+    overdueAccountsCount: overdueAccounts.length,
+    totalOverdueAmt, totalOutstanding,
+    revolvingCount: revolving.length,
+    revolvingTotalLimit: revolving.length ? revolving.reduce((s,a) => {
+      const raw = (a.limit || a.sanctioned || '').toString().split('/')[0];
+      const n = parseFloat(raw.replace(/,/g,'')); return s + (isNaN(n) ? 0 : n);
+    }, 0) : 0,
+    revolvingTotalBal: revolving.reduce((s,a) => s + (a.balanceNum || 0), 0),
+    badAccountsCount: badAccounts.length,
+    hasWriteOff: badAccounts.some(a => /written-off/i.test(a.status))
   };
 }
 
@@ -2971,6 +3068,109 @@ function metricCardHtml(label, valueText, band){
       <div class="rd-bar-track"><div class="rd-bar-fill" style="width:${pct}%; background:${color};"></div></div>
       ${band ? `<span class="rd-band-pill" style="background:${color};">${band}</span>` : `<span class="rd-band-pill" style="background:#C7D2DA;">N/A</span>`}
     </div>`;
+}
+
+// Combined "at a glance" bar chart across all 5 dashboard factors, so the
+// person sees where the score is being helped vs hurt in one picture
+// instead of scanning five separate metric cards. Reuses the exact same
+// 0/20/40/60/80/100 band-position scale as each metric card's own mini bar
+// (BAND_LABELS.indexOf(band)+1)*20, so this chart and the cards above it
+// always agree with each other.
+function factorChartSvg(rows){
+  const barH = 22, gap = 14, leftW = 128, chartW = 300, topPad = 6;
+  const h = topPad*2 + rows.length*(barH+gap) - gap;
+  const bars = rows.map((r, i) => {
+    const y = topPad + i*(barH+gap);
+    const pct = r.band ? (BAND_LABELS.indexOf(r.band)+1) * 20 : 0;
+    const w = Math.max(2, chartW * pct/100);
+    const color = r.band ? BAND_COLORS[r.band] : '#C7D2DA';
+    return `
+      <text x="0" y="${y+barH/2+4}" font-size="12" font-weight="700" fill="#3A4550">${r.label}</text>
+      <rect x="${leftW}" y="${y}" width="${chartW}" height="${barH}" rx="5" fill="#EDF2F5"/>
+      <rect x="${leftW}" y="${y}" width="${w.toFixed(1)}" height="${barH}" rx="5" fill="${color}"/>
+      <text x="${leftW+chartW+10}" y="${y+barH/2+4}" font-size="12" font-weight="800" fill="${color}">${r.valueText}</text>
+    `;
+  }).join('');
+  return `<svg viewBox="0 0 ${leftW+chartW+70} ${h}" style="width:100%; height:auto; display:block;">${bars}</svg>`;
+}
+
+// Concrete, numbers-backed suggestions -- one per weak factor, using the
+// raw rupee/count figures already collected in computeDashboard() rather
+// than generic advice, plus a standing note on any written-off/settled
+// accounts (which sit outside the 5-factor scoring model but matter more
+// to recoverability than any single one of those factors).
+function buildSuggestions(d, bands){
+  const tips = [];
+  const inr = n => '\u20b9' + Math.round(n).toLocaleString('en-IN');
+
+  if (bands.repayBand === 'Poor' || bands.repayBand === 'Fair'){
+    if (d.totalOverdueAmt > 0){
+      tips.push(`Clear the ${inr(d.totalOverdueAmt)} currently overdue across ${d.overdueAccountsCount} account(s) -- repayment history carries the most weight in your score, and even a small overdue balance dents it while it stays open.`);
+    } else {
+      tips.push(`${d.overdueAccountsCount} account(s) show an overdue flag -- bring every one fully current, then keep 12+ months of on-time payments to rebuild this factor.`);
+    }
+  }
+  if (bands.utilBand === 'Poor' || bands.utilBand === 'Fair'){
+    const targetBal = d.revolvingTotalLimit * 0.30;
+    const payDown = d.revolvingTotalBal - targetBal;
+    if (payDown > 0){
+      tips.push(`Credit card/overdraft utilization is ${d.utilizationPct}% of ${inr(d.revolvingTotalLimit)} available -- paying down about ${inr(payDown)} to get under the commonly-recommended 30% mark should help.`);
+    } else {
+      tips.push(`Credit card/overdraft utilization is ${d.utilizationPct}% -- try to keep it under 30% of the limit going forward, ideally by paying before the statement date rather than just the due date.`);
+    }
+  }
+  if (bands.enqBand === 'Poor' || bands.enqBand === 'Fair'){
+    tips.push(`${d.enqRecent} hard enquir${d.enqRecent===1?'y':'ies'} in the last 6 months -- avoid applying for new loans/cards for a while; each application dents the score a little and several close together looks like credit-hungry behaviour to lenders.`);
+  }
+  if (bands.ageBand === 'Poor' || bands.ageBand === 'Fair'){
+    tips.push(`Credit history is ${d.creditAgeYears !== null ? d.creditAgeYears.toFixed(1) : '0'} year(s) old -- this factor improves on its own with time; the main thing to avoid is closing your oldest account, since that shortens average history.`);
+  }
+  if (bands.mixBand === 'Poor' || bands.mixBand === 'Fair'){
+    tips.push(`Only ${d.creditMixCount} type${d.creditMixCount===1?'':'s'} of credit on file -- a healthy mix of secured (e.g. loan) and unsecured (e.g. card) credit helps, but this is a smaller factor; don't take on a new loan just for this alone.`);
+  }
+  if (d.badAccountsCount > 0){
+    tips.push(`${d.badAccountsCount} written-off/settled account(s) on file${d.hasWriteOff ? ' (written-off is the more serious of the two)' : ''} -- if any balance remains, closing it out and getting a written closure/NOC from the lender is worth doing even though these entries stay visible on the report for a period; they weigh less over time as fresh on-time payment history builds up alongside them.`);
+  }
+  if (!tips.length){
+    tips.push('No specific weak factor stands out -- the main task now is simply keeping every account current and letting the existing history season further.');
+  }
+  return tips;
+}
+
+// Overall verdict -- deliberately never phrased as "not worth trying" or
+// "no coming back": a CIBIL score has no permanent floor, and negative
+// entries lose weight over time as fresh on-time history accumulates
+// alongside them. What genuinely differs case to case is the realistic
+// TIMEFRAME and what to prioritize first, so the verdict names that
+// instead of a bare pass/fail judgement.
+function scoreVerdict(score, scoreBand, d){
+  const highFlags = d.flags.filter(f => f.sev === 'HIGH').length;
+  if (d.hasWriteOff || score < 550){
+    return {
+      cls: 'poor',
+      title: 'Needs focused repair -- but recoverable',
+      body: `A score this low with${d.hasWriteOff ? ' a written-off account' : ' multiple negative factors'} on file usually reflects real missed payments, not a scoring quirk -- so the fix is behavioural, not a quick trick. Realistically expect 18-36 months of clearing dues and a clean, fully-on-time track record before the score moves meaningfully. It is genuinely worth doing: negative entries carry less weight over time as fresh good history builds up next to them, and there's no permanent bar to recovering from here.`
+    };
+  }
+  if (score < 650 || highFlags >= 1){
+    return {
+      cls: 'fair',
+      title: 'Recoverable with a focused 6-12 month plan',
+      body: `The profile has real issues (see the flags and suggestions above) but nothing that looks unrecoverable. Tackling the highest-weight factor first -- usually clearing any overdue balance -- tends to move the score fastest; expect visible improvement within 2-3 reporting cycles (roughly 6-12 months) of consistent on-time behaviour.`
+    };
+  }
+  if (score < 750){
+    return {
+      cls: 'good',
+      title: 'Healthy profile, room to optimize',
+      body: `This is a workable score for most lending decisions. Addressing whichever factor above isn't "Good" or better -- typically utilization or recent enquiries -- can push it into the Very Good/Excellent range over the next few months.`
+    };
+  }
+  return {
+    cls: 'excellent',
+    title: 'Strong profile -- maintain current habits',
+    body: `Nothing here needs urgent correction. Keep payments on time, keep utilization low, and avoid unnecessary new credit applications to hold this position.`
+  };
 }
 
 function gaugeSvg(score){
@@ -3084,7 +3284,28 @@ function renderRiskDashboard(){
       </div>
       ${flagsHtml}
     </div>
-    <div class="rd-disclaimer">⚠️ These bands and flags are ScoreDesk's own heuristic read of the data in this report — not TransUnion CIBIL's or any bureau's official scoring methodology. The month-by-month DPD (days-past-due) trend isn't extracted yet, so "currently overdue" reflects the latest reported status only. Always verify against the original PDF before making a lending decision.</div>
+
+    <div class="rd-improve">
+      <h4>📈 Score Improvement Plan</h4>
+      <div class="rd-chart-wrap">
+        ${factorChartSvg([
+          { label: 'Repayment History', band: repayBand, valueText: d.repaymentPct + '%' },
+          { label: 'Credit Utilization', band: utilBand, valueText: d.utilizationPct !== null ? d.utilizationPct + '%' : 'N/A' },
+          { label: 'Credit Age', band: ageBand, valueText: d.creditAgeYears !== null ? d.creditAgeYears.toFixed(1) + 'y' : 'N/A' },
+          { label: 'Enquiry Frequency', band: enqBand, valueText: d.enqRecent + '/6mo' },
+          { label: 'Credit Mix', band: mixBand, valueText: d.creditMixCount + ' type' + (d.creditMixCount===1?'':'s') }
+        ])}
+      </div>
+      <div class="rd-suggest-list">
+        ${buildSuggestions(d, { repayBand, utilBand, ageBand, enqBand, mixBand }).map(t => `<div class="rd-suggest-item">💡 ${t}</div>`).join('')}
+      </div>
+      ${(() => {
+        const v = scoreVerdict(score, scoreBand, d);
+        return `<div class="rd-verdict rd-verdict-${v.cls}"><div class="rd-verdict-title">${v.title}</div><div class="rd-verdict-body">${v.body}</div></div>`;
+      })()}
+    </div>
+
+    <div class="rd-disclaimer">⚠️ These bands, flags, and suggestions are ScoreDesk's own heuristic read of the data in this report — not TransUnion CIBIL's or any bureau's official scoring methodology or financial advice. The month-by-month DPD (days-past-due) trend isn't extracted yet, so "currently overdue" reflects the latest reported status only. Always verify against the original PDF and consult a qualified advisor before making a lending or credit decision.</div>
   `;
 }
 
