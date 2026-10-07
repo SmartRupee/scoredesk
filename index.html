@@ -477,10 +477,10 @@
     <div class="card">
       <div class="hero-head">
         <h2>Upload Your CIBIL Report</h2>
-        <div class="hero-sub">Secure · PDF Only · Takes About 30 Seconds</div>
+        <div class="hero-sub">Secure · PDF or Saved HTML Page · Takes About 30 Seconds</div>
         <div class="trust-row">
           <span>🔒 <b>Processed locally</b> — never uploaded</span>
-          <span>✓ <b>PDF only</b></span>
+          <span>✓ <b>PDF or HTML</b></span>
           <span>✓ <b>No data stored</b></span>
           <span>✓ <b>Free score analysis</b></span>
         </div>
@@ -488,9 +488,9 @@
       <div class="drop" id="dropZone">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 3v12m0-12l-4 4m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <div class="big">Click to choose a file, or drag it here</div>
-        <div class="small">Any CIBIL report layout, scanned or text · Other bureaus read on a best-effort basis</div>
+        <div class="small">PDF (any layout, scanned or text) or a saved HTML report page · Other bureaus read on a best-effort basis</div>
       </div>
-      <input type="file" id="fileInput" accept="application/pdf">
+      <input type="file" id="fileInput" accept="application/pdf,text/html,.html,.htm">
       <div class="status-line" id="statusLine"><span class="dot" id="statusDot"></span><span id="statusText">Waiting for a file…</span></div>
       <div class="progress-track" id="progressTrack" style="display:none;">
         <div class="progress-fill" id="progressFill"></div>
@@ -525,11 +525,15 @@
       <div id="riskDashboard" class="risk-dashboard" style="display:none;"></div>
       <div id="emptyHint" class="empty-hint" style="display:none;">Some fields couldn't be auto-detected — this can happen if the PDF was scanned as an image rather than text. Check the preview table below and correct anything odd directly in the downloaded Excel file.</div>
       <div id="genericWarning" class="password-box" style="display:none; background:#FFF8EC; border-color:#EAD9AE;">
-        ⚠️ <b>This report's layout wasn't fully recognized</b> — it may be from a bureau other than TransUnion CIBIL, or a format we haven't calibrated yet. The numbers below are a best-effort extraction: please double-check them carefully against the original PDF before relying on them, and consider sharing a sample (with sensitive details blacked out) so full support can be added.
+        ⚠️ <b>This report's layout wasn't fully recognized</b> — it may be from a bureau other than TransUnion CIBIL, or a format we haven't calibrated yet. The numbers below are a best-effort extraction: please double-check them carefully against the original PDF before relying on them.
+        <div style="margin-top:10px;">See <b>"Which report formats are supported?"</b> in the FAQ below for the current list, or send this one to our developer so full support can be added:</div>
+        <button type="button" id="genericWarningWaBtn" class="primary cta-block" style="margin-top:10px;">📲 Share this report on WhatsApp</button>
+        <div class="form-note" style="margin-top:6px;">This opens a WhatsApp chat to <b>+91 96193 98808</b> with a message pre-filled — please <b>attach the PDF yourself</b> in the chat before sending (a web page can't attach or send files on its own), and we'll get back to you shortly once we've added support for it.</div>
       </div>
       <div id="scoreImageNote" class="password-box" style="display:none; background:#EEF6FF; border-color:#BFDBFE;">
         ℹ️ <b>CIBIL Score not shown above</b> — in this report layout, the score is a drawn dial/gauge picture, not text, so it can't be read reliably from the file (a picture of a "6" and "9" digit can easily be misread as an "8"). Please check the number on <b>page 1 of the PDF</b> directly. Everything else (accounts, EMIs, balances, enquiries) is read from real text and is not affected.
       </div>
+      <div id="artifactWarning" class="password-box" style="display:none; background:#FFF1F0; border-color:#F3B4AE;"></div>
       <div id="summaryOnlyNote" class="password-box" style="display:none; background:#EEF6FF; border-color:#BFDBFE;"></div>
       <div id="reviewSummary" class="review-summary" style="display:none;"></div>
       <div class="acct-search-row">
@@ -856,6 +860,12 @@ function openWhatsApp(text){
   window.open(url, '_blank');
 }
 
+document.getElementById('genericWarningWaBtn').addEventListener('click', () => {
+  const fileNote = lastFileName ? `\nFile: ${lastFileName}` : '';
+  const text = `Hi, ScoreDesk didn't recognize my report's format.${fileNote}\n\nI'm attaching the PDF here — could you take a look and add support for it?`;
+  openWhatsApp(text);
+});
+
 document.getElementById('enquirySendBtn').addEventListener('click', () => {
   const name = document.getElementById('enqName').value.trim();
   const phone = document.getElementById('enqPhone').value.trim();
@@ -991,6 +1001,7 @@ const emptyHint = document.getElementById('emptyHint');
 const genericWarning = document.getElementById('genericWarning');
 const scoreImageNote = document.getElementById('scoreImageNote');
 const summaryOnlyNote = document.getElementById('summaryOnlyNote');
+const artifactWarning = document.getElementById('artifactWarning');
 const reviewSummary = document.getElementById('reviewSummary');
 const passwordBox = document.getElementById('passwordBox');
 const pdfPasswordInput = document.getElementById('pdfPasswordInput');
@@ -1202,7 +1213,15 @@ function loadPdfWithPassword(buf){
 let ocrWorker = null;
 async function getOcrWorker(){
   if (!ocrWorker){
-    ocrWorker = await Tesseract.createWorker('eng');
+    // Tesseract.js defaults to spinning up its worker via a Blob URL. Some
+    // origins — strict-CSP sandboxes, some corporate/locked-down browsers,
+    // certain privacy browsers — block constructing a Worker from a blob
+    // entirely ("SecurityError: Failed to construct 'Worker'"), which would
+    // otherwise silently kill every OCR-dependent feature (scanned-page
+    // reading, the drawn-score-gauge fallback, and the artifact cross-check
+    // above). workerBlobURL:false tells it to load the worker script via a
+    // normal script URL instead, which works in those environments too.
+    ocrWorker = await Tesseract.createWorker('eng', 1, { workerBlobURL: false });
   }
   return ocrWorker;
 }
@@ -1231,6 +1250,76 @@ function findScorePageNumber(pageTexts){
     if (/\bCIBIL\s*SCORE\b|\bCREDIT\s*SCORE\b|\bYOUR\s*SCORE\b/i.test(pageTexts[i])) return i + 1;
   }
   return null;
+}
+
+// Best-effort second opinion for fields the self-check (detectParsingArtifacts,
+// in the parsing engine below) already flagged as suspicious. This is
+// deliberately NOT a fix — it's a cross-check shown ALONGSIDE the flagged
+// value, not a replacement for it. OCR misreads digits often enough
+// (0/8, 1/7, 5/S) that silently trusting it over the original would just
+// swap one kind of wrong for another, harder-to-notice kind. What it's
+// genuinely good for: confirming/refuting a suspicious value using a
+// completely independent read of the same page — real text extraction and
+// OCR fail in different, uncorrelated ways, so agreement between them is a
+// much stronger signal than either alone, and disagreement is exactly the
+// "please look at this by eye" flag a human needs.
+const ARTIFACT_FIELD_LABEL_PATTERNS = {
+  ownership:  /Ownership\s*[:\n]?\s*([A-Za-z][A-Za-z ]{2,24})/i,
+  type:       /Account\s*Type\s*[:\n]?\s*([A-Za-z][A-Za-z0-9 \-\/]{2,50})/i,
+  opened:     /Date\s*Opened\s*\/?\s*Disbursed\s*[:\n]?\s*([\d]{1,2}[\/\-][\d]{1,2}[\/\-][\d]{2,4})/i,
+  closed:     /Date\s*Closed\s*[:\n]?\s*([\d]{1,2}[\/\-][\d]{1,2}[\/\-][\d]{2,4})/i,
+  sanctioned: /Sanctioned\s*Amount\s*[:\n]?\s*[₹]?\s*([\d,\.]{2,15})/i,
+  balance:    /Current\s*Balance\s*[:\n]?\s*[₹]?\s*([\d,\.]{1,15})/i,
+  emi:        /EMI\s*Amount\s*[:\n]?\s*[₹]?\s*([\d,\.]{1,15})/i,
+  interest:   /Rate\s*of\s*Interest\s*[:\n]?\s*([\d\.]{1,6})/i,
+  tenure:     /Repayment\s*Tenure\s*[:\n]?\s*([\d]{1,4})/i,
+};
+
+// Given a flagged artifact's (contaminated) value, find which page it most
+// likely came from. The junk text itself — a URL, "Page N of M", etc — is
+// usually distinctive enough to appear on exactly one page, which is more
+// reliable than trying to locate the clean field content (which is, after
+// all, the thing that's missing).
+function findLikelySourcePage(pageTexts, artifactValue){
+  const needle = artifactValue.slice(0, 30);
+  let idx = pageTexts.findIndex(t => t.includes(needle));
+  if (idx !== -1) return idx + 1;
+  const cleanNeedle = artifactValue
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/\bPage\s+\d+\s+of\s+\d+\b/gi, '')
+    .trim()
+    .slice(0, 15);
+  if (cleanNeedle.length >= 4){
+    idx = pageTexts.findIndex(t => t.includes(cleanNeedle));
+    if (idx !== -1) return idx + 1;
+  }
+  return null;
+}
+
+// Runs the cross-check for up to MAX_CHECKS flagged fields (OCR is slow —
+// this deliberately doesn't try to verify everything). Mutates each
+// artifact in place, adding .ocrGuess when a candidate was found and
+// .ocrPageNum for context, so renderResults() can show both readings.
+async function crossCheckArtifactsViaOCR(pdf, pageTexts, artifacts, onStatus){
+  const MAX_CHECKS = 3;
+  const targets = artifacts.filter(a => ARTIFACT_FIELD_LABEL_PATTERNS[a.field]).slice(0, MAX_CHECKS);
+  for (const artifact of targets){
+    const pageNum = findLikelySourcePage(pageTexts, artifact.value);
+    if (!pageNum) continue;
+    onStatus && onStatus(`Cross-checking ${artifact.field}${artifact.accountIdx ? ' (row ' + artifact.accountIdx + ')' : ''} via OCR — page ${pageNum}…`);
+    try{
+      const page = await pdf.getPage(pageNum);
+      const ocrText = await ocrPage(page);
+      const pattern = ARTIFACT_FIELD_LABEL_PATTERNS[artifact.field];
+      const m = ocrText.match(pattern);
+      if (m && m[1]){
+        artifact.ocrGuess = clean(m[1]);
+        artifact.ocrPageNum = pageNum;
+      }
+    }catch(e){
+      console.warn('OCR cross-check failed for', artifact.field, e);
+    }
+  }
 }
 
 // Reads the CIBIL Score off a drawn gauge/dial image using the page's own
@@ -1375,6 +1464,57 @@ async function extractScoreViaOCR(page, onStatus){
 // followed by "RAKHEE SHROFF" on the very same visual row, which silently
 // truncated names to a single word/prefix. Real Y-position is reliable
 // regardless of how the source PDF was generated; hasEOL is not.
+// Turns a saved HTML report page's DOM into the same kind of positional
+// label\nvalue text stream itemsToText() produces from a PDF's text layer —
+// so every existing format parser (A-I, E) can read it completely
+// unchanged. Unlike a PDF, real DOM structure has no page breaks, no print
+// footers, and no glyph-position guessing: a table cell IS a table cell.
+// That's the whole point of accepting HTML at all — it sidesteps the
+// entire class of bug this conversation has been chasing (Safari's print
+// footer, positional field-scrambling) because there's nothing to
+// reconstruct in the first place.
+const HTML_BLOCK_TAGS = new Set([
+  'DIV','P','TR','TABLE','TBODY','THEAD','SECTION','ARTICLE','LI','UL','OL',
+  'H1','H2','H3','H4','H5','H6','BR','TD','TH','HEADER','FOOTER','FORM','MAIN','BODY'
+]);
+const HTML_SKIP_TAGS = new Set(['SCRIPT','STYLE','NOSCRIPT','TEMPLATE','SVG','HEAD','IFRAME']);
+
+function htmlElementIsHidden(el){
+  const style = (el.getAttribute && el.getAttribute('style')) || '';
+  if (/display\s*:\s*none/i.test(style) || /visibility\s*:\s*hidden/i.test(style)) return true;
+  if (el.hidden) return true;
+  if ((el.getAttribute('aria-hidden') || '').toLowerCase() === 'true') return true;
+  return false;
+}
+
+function htmlToText(root){
+  let out = '';
+  function endsWithNewline(){ return out.length === 0 || out.endsWith('\n'); }
+  function walk(node){
+    if (node.nodeType === 3){ // text node
+      const t = node.nodeValue.replace(/[ \t\r\f\v]+/g, ' ');
+      if (t.trim() !== ''){
+        // Preserve a single leading/trailing space so words from adjacent
+        // inline elements don't get jammed together ("Ownership" +
+        // "Individual" → "OwnershipIndividual").
+        out += (!endsWithNewline() && !out.endsWith(' ') && /^\s/.test(t) ? ' ' : '') + t.trim() +
+               (/\s$/.test(t) ? ' ' : '');
+      }
+      return;
+    }
+    if (node.nodeType !== 1) return; // only elements and text nodes matter
+    const tag = node.tagName;
+    if (HTML_SKIP_TAGS.has(tag)) return;
+    if (htmlElementIsHidden(node)) return;
+    const isBlock = HTML_BLOCK_TAGS.has(tag);
+    if (isBlock && !endsWithNewline()) out += '\n';
+    for (const child of node.childNodes) walk(child);
+    if (isBlock && !endsWithNewline()) out += '\n';
+  }
+  walk(root);
+  return out.replace(/[ \t]+/g, ' ').replace(/ \n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function itemsToText(items){
   let text = '';
   let last = null;
@@ -1401,8 +1541,10 @@ function itemsToText(items){
 let currentRequestId = 0;
 
 async function handleFile(file){
-  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')){
-    setStatus('Please choose a .pdf file.', 'err');
+  const isHtml = file.type === 'text/html' || /\.html?$/i.test(file.name);
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  if (!isHtml && !isPdf){
+    setStatus('Please choose a .pdf or .html file.', 'err');
     return;
   }
   // Tag this run. If a newer file is selected before this one finishes,
@@ -1411,7 +1553,7 @@ async function handleFile(file){
   const scanStartTime = performance.now();
   lastFileName = file.name;
 
-  setStatus('Reading PDF…');
+  setStatus(isHtml ? 'Reading HTML…' : 'Reading PDF…');
   resultsCard.style.display = 'none';
   readyBanner.style.display = 'none';
   loanTableBody.innerHTML = '';
@@ -1423,6 +1565,51 @@ async function handleFile(file){
   showLiveMeter('pending');
   startProgress();
   try{
+    // HTML path: a saved report webpage (e.g. "Save Page As" from
+    // myscore.cibil.com) has real DOM structure — actual table cells and
+    // labels, no page breaks, no print-footer artifacts to strip, nothing
+    // to positionally reconstruct. That sidesteps the entire class of bug
+    // this tool has spent the most effort chasing on the PDF side. It
+    // rejoins the exact same parseReport()/renderResults() pipeline the
+    // PDF path uses, so every format parser works unmodified — only the
+    // text-extraction step differs.
+    if (isHtml){
+      updateProgress(0.2);
+      const rawHtml = await file.text();
+      if (requestId !== currentRequestId) return;
+      const doc = new DOMParser().parseFromString(rawHtml, 'text/html');
+      const fullText = htmlToText(doc.body || doc.documentElement);
+      setStatus('Parsing loan accounts…');
+      updateProgress(0.7);
+      parseReport(fullText);
+      if (requestId !== currentRequestId) return;
+
+      reportMeta.sourceType = 'html';
+      // No drawn-gauge OCR fallback here — a saved webpage's score is
+      // either real DOM text (already captured above) or, on the rare
+      // report that draws it as an image/canvas, genuinely unreadable
+      // without re-fetching image assets this tool never receives. Report
+      // it plainly rather than guessing.
+      if (reportMeta.score){
+        reportMeta.scoreSource = 'text';
+        showLiveMeter('text', null, reportMeta.score);
+      } else {
+        reportMeta.scoreSource = 'unavailable';
+        showLiveMeter('unavailable', null);
+      }
+
+      updateProgress(0.97);
+      lastScanDurationMs = performance.now() - scanStartTime;
+      renderResults();
+      setStatus(`Done — found ${parsedAccounts.length} accounts and ${parsedEnquiries.length} enquiries (read from saved HTML page).`, 'ok');
+      readyBanner.style.display = 'block';
+      stopProgress(true);
+      if (riskDashboard.style.display === 'block'){
+        setTimeout(hideLiveMeter, 1400);
+      }
+      return;
+    }
+
     const buf = await file.arrayBuffer();
     const pdf = await loadPdfWithPassword(buf);
     lastPageCount = pdf.numPages;
@@ -1455,19 +1642,22 @@ async function handleFile(file){
     if (requestId !== currentRequestId) return; // superseded by a newer upload
     setStatus('Parsing loan accounts…');
     updateProgress(0.88);
-    // Some myscore.cibil.com exports (the "creditReportPrint.page" URL,
-    // used when printing/saving the report to PDF from the browser) stamp
-    // a running "{timestamp} CIBIL Report" + page-URL footer on EVERY
-    // page. Since account/personal-detail fields can straddle a page
-    // break, this footer text lands right in the middle of a field —
-    // e.g. an account's "Ownership" value coming out as the footer's URL
-    // instead of "Individual"/"Joint". It's the same handful of lines
-    // repeated verbatim once per page, so it's safe to strip everywhere.
-    fullText = fullText.replace(
-      /\n*\d{1,2}\/\d{1,2}\/\d{2,4},?\s*\d{1,2}:\d{2}\s*[AP]M\s*CIBIL Report\n*https:\/\/myscore\.cibil\.com\/CreditView\/creditReportPrint\.page\?enterprise=CIBIL\s*\d+\/\d+\n*/g,
-      '\n'
-    );
     parseReport(fullText);
+    if (requestId !== currentRequestId) return; // superseded by a newer upload
+
+    // Cross-check whatever the self-check just flagged, using OCR as an
+    // independent second read of the same page. Capped and best-effort —
+    // see crossCheckArtifactsViaOCR's own comment for why this doesn't try
+    // to silently "fix" anything.
+    if (reportMeta.hasParsingArtifacts){
+      updateProgress(0.85);
+      try{
+        await crossCheckArtifactsViaOCR(pdf, pageTexts, reportMeta.parsingArtifacts, setStatus);
+      }catch(xcheckErr){
+        console.warn('Artifact cross-check failed', xcheckErr);
+      }
+      if (requestId !== currentRequestId) return; // superseded by a newer upload
+    }
 
     // Score gauge OCR fallback — applies to ANY format/layout, not just
     // ones ScoreDesk has an exact parser for: parseReport() flags
@@ -1533,7 +1723,12 @@ async function handleFile(file){
   }catch(err){
     if (requestId !== currentRequestId) return; // superseded by a newer upload
     console.error(err);
-    setStatus('Could not read this PDF. It may be a scanned image rather than a text PDF.', 'err');
+    setStatus(
+      isHtml
+        ? 'Could not read this HTML file.'
+        : 'Could not read this PDF. It may be a scanned image rather than a text PDF.',
+      'err'
+    );
     stopProgress(false);
     hideLiveMeter();
   }
@@ -1583,7 +1778,7 @@ const ENQUIRY_PURPOSES = [
   "Business Loan – Secured","Business Loan - Secured",
   "Business Loan – General","Business Loan - General",
   "Personal Loan","Consumer Loan","Credit Card","Housing Loan","Property Loan",
-  "Two-wheeler Loan","Two Wheeler Loan","Auto Loan","Gold Loan","Overdraft","Other",
+  "Two-wheeler Loan","Two Wheeler Loan","Auto Loan (Personal)","Auto Loan","Gold Loan","Overdraft","Others","Other",
   "Microfinance – Housing Loan","Microfinance - Housing Loan"
 ];
 const enquiryPurposeAlt = [...ENQUIRY_PURPOSES].sort((a,b)=>b.length-a.length)
@@ -1747,6 +1942,78 @@ function parseFlexDate(str){
 }
 
 function parseReport(text){
+  // Some myscore.cibil.com print exports render certain headings/labels
+  // (page title, the greeting name, section labels like "Name"/"Date Of
+  // Birth", account labels like "Account Type"/"Date Closed") using a CSS
+  // effect (a faux-bold/shadow style stacking several copies of the same
+  // text) that Chrome's/Safari's print-to-PDF captures as literal
+  // duplicate text runs glued together with zero separator — e.g. "Account
+  // TypeAccount TypeAccount TypeAccount Type" instead of "Account Type".
+  // Confirmed against a real export: this silently broke name, score, and
+  // every account's Opened/Closed date (any field whose LABEL got this
+  // treatment stopped matching, even though the field's own VALUE was
+  // untouched). Fix: collapse any run of the same text repeated
+  // immediately 2+ times back-to-back. Lives here (not in the PDF-loading
+  // code) because it's a pure text transform with no PDF/DOM dependency —
+  // every input path benefits automatically, and it's what the regression
+  // suite exercises directly.
+  //
+  // Deliberately requires the repeated unit to START WITH A LETTER — a
+  // control/account number is pure digits (often comma-grouped, e.g.
+  // "11,61,64,58,598") and can easily contain a short coincidental
+  // digit-pattern repeat by pure chance; collapsing that would silently
+  // corrupt a real number, which is a far worse failure than a label just
+  // not matching. Letters only appear in this artifact's actual
+  // labels/headings, never inside a real ID/amount, so this can't misfire
+  // on financial data. The capture is intentionally LAZY ({3,80}?) so it
+  // finds the smallest true repeating unit first (e.g. "Name", not
+  // "NameName") — a greedy quantifier here would sometimes only collapse a
+  // 4x repeat down to 2x instead of all the way to 1x.
+  text = text.replace(/([A-Za-z][A-Za-z0-9 ,&().\/\-]{3,80}?)\1{1,9}/g, '$1');
+
+  // The score number itself is a separate case from the label collapse
+  // above — it's pure digits ("782782782782"), which the letter-starting
+  // rule above deliberately leaves alone. A CIBIL score is always exactly
+  // 3 digits, so collapsing an exact 3-digit unit repeated 2-4 times in a
+  // row is narrow enough to be safe: a real ID/account number would need
+  // four of its own 3-digit groups to be bit-for-bit identical AND
+  // uninterrupted by any comma/letter to false-match here, which doesn't
+  // happen in practice (confirmed against the real control and account
+  // numbers in both test reports — neither was affected).
+  text = text.replace(/\b(\d{3})\1{1,3}\b/g, '$1');
+
+  // Some myscore.cibil.com exports (the "creditReportPrint.page" URL, used
+  // when printing/saving the report to PDF from the browser) stamp a
+  // running per-page footer — a timestamp + page URL + page number — on
+  // EVERY page. Since account/personal-detail fields can straddle a page
+  // break, this footer text lands right in the middle of a field — e.g. an
+  // account's "Ownership" value coming out as the footer's URL instead of
+  // "Individual"/"Joint". Two variants seen so far: Chrome's ("{timestamp}
+  // CIBIL Report" then the URL then "N/M"), and Safari's (URL then
+  // timestamp then a spelled-out "Page N of M" then a stray lone ":") — the
+  // two need separate patterns since the wording differs, but both are
+  // whitespace-agnostic ([\s\S] rather than requiring \n between parts)
+  // because the real PDF.js text layer sometimes puts the whole footer on
+  // one visual line and sometimes splits it across several, depending on
+  // exactly where it falls relative to a page break; a regex that only
+  // matched one arrangement left the other silently un-stripped.
+  text = text.replace(
+    /\n*\d{1,2}\/\d{1,2}\/\d{2,4},?\s*\d{1,2}:\d{2}\s*[AP]M\s*CIBIL Report[\s\S]*?https:\/\/myscore\.cibil\.com\/CreditView\/creditReportPrint\.page\?enterprise=CIBIL\s*\d+\/\d+\s*/g,
+    '\n'
+  );
+  text = text.replace(
+    /\s*https:\/\/myscore\.cibil\.com\/CreditView\/creditReportPrint\.page\?enterprise=CIBIL[\s\S]*?Page\s+\d+\s+of\s+\d+\s*:?\s*/g,
+    '\n'
+  );
+
+  // CRIF High Mark's ReportLab-generated exports stamp "Generated: <date>
+  // <time>" immediately followed by "Page <n>" on every page — same class
+  // of per-page-footer problem as the two above, just a different vendor's
+  // wording, so it gets the same treatment here rather than being scoped
+  // to Format K specifically (cheap and harmless to run unconditionally;
+  // this exact phrase pair doesn't occur in real CIBIL report content).
+  text = text.replace(/\n?Generated:\s*\d{1,2}-\d{1,2}-\d{2,4}\s+\d{1,2}:\d{2}\s*[AP]M\s*\n?Page\s+\d+\s*\n?/g, '\n');
+
   reportMeta.genericFallback = false;
   reportMeta.scoreIsImage = false;
   reportMeta.scoreSource = null;
@@ -1778,6 +2045,39 @@ function parseReport(text){
     parseFormatI(text);
     if (!reportMeta.score){
       reportMeta.scoreIsImage = /\b(?:CIBIL|CREDIT|BUREAU)?\s*SCORE\b/i.test(text);
+    }
+    return;
+  }
+
+  // A Consumer CIR export style with a distinctive per-account anchor line
+  // ("ACCOUNT INFORMATION DATE OPENED : ... | DATE CLOSED : ... | DATE
+  // REPORTED & CERTIFIED : ...") and multi-word field labels that wrap one
+  // word per line (e.g. "MEMBER" / "NAME" / ": NOT DISCLOSED" as three
+  // separate lines) — none of the other parsers' label patterns tolerate
+  // that wrapping, so this is routed directly rather than left to fall
+  // through the A-H chain.
+  if (/ACCOUNT INFORMATION DATE OPENED\s*:/i.test(text)){
+    parseFormatJ(text);
+    if (!reportMeta.score){
+      reportMeta.scoreIsImage = /\b(?:CIBIL|CREDIT|BUREAU)?\s*SCORE\b/i.test(text);
+    }
+    return;
+  }
+
+  // CRIF High Mark — a different credit bureau from CIBIL entirely, not a
+  // layout variant of it. Generated by ReportLab (a PDF-generation library)
+  // rather than a browser's print-to-PDF, so none of the browser-export
+  // quirks apply, but it has its own: a "Generated: <date> <time> / Page N"
+  // footer on every page (stripped below, same rationale as the CIBIL
+  // footer strippers — pure text transform, applies before any parser
+  // runs) and an "Account Information" heading repeating once per account
+  // with colon-labeled fields on shared lines (e.g. "Account Status:
+  // Closed", "Ownership: Individual Security Status: Secured Disbursed
+  // Date: ...").
+  if (/CRIF HM Score/i.test(text)){
+    parseFormatK(text);
+    if (!reportMeta.score){
+      reportMeta.scoreIsImage = /\bScore\b/i.test(text);
     }
     return;
   }
@@ -1849,6 +2149,66 @@ function parseReport(text){
   if (!reportMeta.score){
     reportMeta.scoreIsImage = /\b(?:CIBIL|CREDIT|BUREAU)?\s*SCORE\b/i.test(text);
   }
+
+  detectParsingArtifacts();
+}
+
+// Self-check: after whichever format parser ran, scan every extracted
+// field for signs that print/export junk (a URL, a "Page N of M" footer, a
+// bare timestamp, etc.) leaked into it — the same class of problem the
+// Safari print-footer fix above addresses, but generalized so an as-yet-
+// unseen browser/export variant is caught automatically instead of needing
+// a human to notice garbled cells and send a sample. This runs regardless
+// of which format matched, so it protects every parser (present and
+// future) for free.
+const JUNK_PATTERNS = [
+  /https?:\/\//i,
+  /\bPage\s+\d+\s+of\s+\d+\b/i,
+  /myscore\.cibil\.com/i,
+  /creditReportPrint/i,
+  /\b\d{1,2}:\d{2}\s*[AP]M\b/i, // a clock time — no legitimate account field contains one
+];
+const KNOWN_OWNERSHIP_VALUES = /^(Individual|Joint|Guarantor|Authorized User)$/i;
+const DATE_SHAPE = /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/;
+
+function fieldLooksLikeJunk(fieldName, value){
+  if (!value) return null;
+  for (const pat of JUNK_PATTERNS){
+    if (pat.test(value)) return 'contains unexpected print/export text';
+  }
+  if (fieldName === 'ownership' && !KNOWN_OWNERSHIP_VALUES.test(value.trim())){
+    return 'expected Individual/Joint/Guarantor/Authorized User';
+  }
+  if ((fieldName === 'opened' || fieldName === 'closed') && !DATE_SHAPE.test(value.trim())){
+    return 'expected a date';
+  }
+  // A field holding far more text than any real value of that kind ever
+  // has is itself suspicious, even without matching a specific junk
+  // pattern above — catches variants of print artifacts not yet seen.
+  if (['ownership','opened','closed','sanctioned','balance','emi','interest','tenure'].includes(fieldName) && value.length > 40){
+    return 'unexpectedly long for this field';
+  }
+  return null;
+}
+
+function detectParsingArtifacts(){
+  const findings = [];
+  parsedAccounts.forEach(acc => {
+    ['type','ownership','opened','closed','sanctioned','balance','emi','limit','interest','tenure','status'].forEach(field => {
+      const val = acc[field];
+      if (typeof val !== 'string') return;
+      const reason = fieldLooksLikeJunk(field, val);
+      if (reason){
+        findings.push({ accountIdx: acc.idx, field, value: val, reason });
+      }
+    });
+  });
+  if (consumerName){
+    const reason = fieldLooksLikeJunk('name', consumerName);
+    if (reason) findings.push({ accountIdx: null, field: 'consumer name', value: consumerName, reason });
+  }
+  reportMeta.parsingArtifacts = findings;
+  reportMeta.hasParsingArtifacts = findings.length > 0;
 }
 
 function parseFormatA(text){
@@ -2053,7 +2413,7 @@ function parseFormatB(text){
     if (colMatch) consumerName = stripTitle(clean(colMatch[1]));
   }
 
-  let scoreMatch = text.match(/CIBIL Score is (\d{3})/i);
+  let scoreMatch = text.match(/CIBIL Score is\s+(\d{3})/i);
   if (!scoreMatch){
     // The score gauge sometimes renders as two separate numbers ("300" and
     // "900") plus the actual score, and when the score sits immediately
@@ -2726,6 +3086,204 @@ function extractFieldsI(block){
   return out;
 }
 
+// Format J — a Consumer CIR export style (seen from a JAI/BS-prefixed member
+// ID) with two distinguishing quirks: (1) each account is anchored by a
+// single-line "ACCOUNT INFORMATION DATE OPENED : X | DATE CLOSED : Y | DATE
+// REPORTED & CERTIFIED : Z STATUS" marker rather than a "Member Name"/
+// "Account Type" block header, and (2) every field's label wraps one word
+// per line when it has more than one word (e.g. "MEMBER" / "NAME" / ":
+// NOT DISCLOSED" as three separate lines, or "SANCTIONED" / "AMOUNT" / ":
+// ₹13,10,000"). Field regexes below tolerate an optional line break between
+// each label word to handle that.
+// Format K — CRIF High Mark reports (a different bureau from CIBIL), as
+// generated by a ReportLab-based export rather than any browser print.
+// Each account is announced by a standalone "Account Information" heading,
+// and its fields sit on a handful of shared lines labeled "Field: value"
+// (sometimes two or three per line, e.g. "Ownership: Individual Security
+// Status: Secured Disbursed Date: 27-07-2023"), with one pair — "Disbd
+// Amt/High" / "Credit:" — wrapping its own label across two lines before
+// the value.
+function cleanAmountK(v){
+  if (!v) return '';
+  v = clean(v).replace(/^₹\s*/, '');
+  return v;
+}
+
+function parseFormatK(text){
+  parsedAccounts = [];
+  parsedEnquiries = [];
+
+  const nameMatch = text.match(/\bName:\s*([A-Za-z .]+?)\s*Gender:/i);
+  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+
+  // The score table's data row is "<model name incl. its own version
+  // digits, e.g. 'PERFORM CONSUMER 2.2'> <3-digit score> <grade letter>" —
+  // anchored to the table's own header row so this can't accidentally
+  // match a version number as the score.
+  const scoreMatch = text.match(/Score Name Range Score Grade[\s\S]*?\n[A-Za-z0-9 .]+?\s+(\d{3})\s+[A-Z]\b/i);
+  reportMeta.score = scoreMatch ? scoreMatch[1] : '';
+
+  const blockRe = /\nAccount Information\n/g;
+  const starts = [];
+  let m;
+  while ((m = blockRe.exec(text)) !== null) starts.push(m.index);
+
+  for (let i = 0; i < starts.length; i++){
+    // Cap block size — payment-history/collateral grids that follow each
+    // account can run long, and without a cap the LAST account's block
+    // would otherwise run to the end of the document.
+    const blockEnd = i + 1 < starts.length ? starts[i+1] : Math.min(text.length, starts[i] + 2500);
+    const block = text.slice(starts[i], blockEnd);
+
+    const type = (block.match(/Account Type:\s*([^\n]*?)\s*Credit Grantor:/i) || [])[1];
+    const status = (block.match(/Account Status:\s*([^\n]+)/i) || [])[1];
+    const ownership = (block.match(/Ownership:\s*([^\n]*?)\s*Security Status:/i) || [])[1];
+    const opened = (block.match(/Disbursed Date:\s*([\d\-]*)/i) || [])[1];
+    const sanctioned = (block.match(/Disbd Amt\/High\s*\n?\s*Credit:\s*\n?\s*([\d,]*)/i) || [])[1];
+    const creditLimit = (block.match(/Credit Limit:\s*([\d,]*)\s*Interest Rate/i) || [])[1];
+    const interest = (block.match(/Interest Rate\s*\(%\):\s*([\d.]*)/i) || [])[1];
+    const balance = (block.match(/Current Balance:\s*([\d,]*)\s*Cash Limit/i) || [])[1];
+    const closed = (block.match(/Closed Date:\s*([\d\-]*)/i) || [])[1];
+    const emi = (block.match(/InstlAmt\/Freq:\s*([\d,]*)/i) || [])[1];
+    const tenure = (block.match(/Tenure\(month\):\s*([\d]*)/i) || [])[1];
+    const overdue = (block.match(/Overdue Amt:\s*([\d,]*)/i) || [])[1];
+
+    const balanceRaw = cleanAmountK(balance);
+    const balanceNum = balanceRaw === '' ? '' : (parseFloat(balanceRaw.replace(/,/g,'')) || 0);
+    let status_ = status ? clean(status) : '';
+    if (overdue && parseFloat(overdue.replace(/,/g,'')) > 0){
+      status_ = (status_ || 'Active') + ' — OVERDUE ₹' + overdue;
+    }
+
+    parsedAccounts.push({
+      idx: i + 1,
+      type: type ? clean(type) : '',
+      ownership: ownership ? clean(ownership) : '',
+      opened: opened || '',
+      closed: closed || '',
+      sanctioned: cleanAmountK(sanctioned),
+      balance: balanceRaw, balanceNum,
+      emi: cleanAmountK(emi),
+      limit: cleanAmountK(creditLimit),
+      interest: cleanAmountK(interest),
+      tenure: tenure ? clean(tenure) : '',
+      status: status_
+    });
+  }
+
+  // Inquiries: a "Credit Grantor Type Date of Inquiry Account Type Amount
+  // Remark" table where the grantor name and account-type purpose both
+  // wrap across several lines with no reliable delimiter between them —
+  // unlike CIBIL's enquiry tables, there's no fixed purpose taxonomy to
+  // anchor on here. The one reliable anchor is the "DD-MM-YYYY  amount"
+  // pair that ends each row; everything between the end of one such pair
+  // and the start of the next is that row's combined grantor+type text.
+  const enqSectionMatch = text.match(/Inquiries\s*\(\s*past 24 months\s*\)([\s\S]*?)(?:-END OF REPORT-|Appendix|$)/i);
+  if (enqSectionMatch){
+    const section = enqSectionMatch[1].replace(/Credit Grantor Type Date of Inquiry Account Type Amount Remark/i, '');
+    const dateAmtRe = /(\d{2}-\d{2}-\d{4})\s+([\d,]+)/g;
+    let prevEnd = 0, dm;
+    while ((dm = dateAmtRe.exec(section)) !== null){
+      const purpose = clean(section.slice(prevEnd, dm.index));
+      prevEnd = dateAmtRe.lastIndex;
+      if (purpose) parsedEnquiries.push({ date: dm[1], purpose, amount: dm[2] });
+    }
+  }
+
+  reportMeta.totalAccounts = String(parsedAccounts.length);
+  reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
+
+  detectParsingArtifacts();
+}
+
+function cleanAmountJ(v){
+  if (!v) return '';
+  v = clean(v).replace(/^₹\s*/, '');
+  if (v === '-' || v === '') return '';
+  return v;
+}
+
+function parseFormatJ(text){
+  parsedAccounts = [];
+  parsedEnquiries = [];
+
+  const nameMatch = text.match(/CONSUMER NAME\s*:\s*([A-Za-z .]+?)(?:\n|GENDER|D\.O\.B|DOB)/i);
+  consumerName = nameMatch ? clean(nameMatch[1]) : '';
+
+  // The score gauge renders as "300 (high risk) ... 900 (low risk) ...
+  // 300 900714" — the min/max/actual-score numbers glued together on one
+  // line with no separator (the same "glued gauge numbers" rendering
+  // quirk Format B works around). Anchored to right after the
+  // "CREDITVISION" heading specifically, since this report layout prints
+  // a SECOND, product-specific score (e.g. "PERSONAL LOAN Score ... 300
+  // 900790") further down that isn't the general-purpose score.
+  const scoreMatch = text.match(/CREDITVISION[^\n]*\n[\s\S]{0,200}?\b300\s*900(\d{3})\b/i);
+  reportMeta.score = scoreMatch ? scoreMatch[1] : '';
+
+  const blockRe = /ACCOUNT INFORMATION DATE OPENED\s*:\s*([\d\/]*)\s*\|\s*DATE CLOSED\s*:\s*([\d\/]*)\s*\|\s*DATE REPORTED & CERTIFIED\s*:\s*([\d\/]*)\s*([A-Z][A-Z \-]*)?/g;
+  const starts = [];
+  let m;
+  while ((m = blockRe.exec(text)) !== null){
+    starts.push({ index: m.index, opened: m[1] || '', closed: m[2] || '', status: (m[4] || '').trim() });
+  }
+
+  for (let i = 0; i < starts.length; i++){
+    const s = starts[i];
+    // Cap how far a block can run — an account's payment-history grid can
+    // be long, and without a cap the LAST account's block would run to the
+    // end of the document (through the enquiries table and glossary) if
+    // any of its own field regexes below fail to match.
+    const blockEnd = i + 1 < starts.length ? starts[i+1].index : Math.min(text.length, s.index + 3000);
+    const block = text.slice(s.index, blockEnd);
+
+    const type = (block.match(/ACCOUNT\s*\n?\s*TYPE\s*:\s*([^\n]+)/i) || [])[1];
+    const ownership = (block.match(/OWNERSHIP\s*:\s*([^\n]+)/i) || [])[1];
+    const sanctioned = (block.match(/SANCTIONED\s*\n?\s*AMOUNT\s*:\s*([^\n]+)/i) || [])[1];
+    const balance = (block.match(/CURRENT\s*\n?\s*BALANCE\s*:\s*([^\n]+)/i) || [])[1];
+    const tenure = (block.match(/REPAYMENT\s*\n?\s*TENURE\s*:\s*([^\n]+)/i) || [])[1];
+    const creditLimit = (block.match(/CREDIT\s*\n?\s*LIMIT\s*:\s*([^\n]+)/i) || [])[1];
+    const emi = (block.match(/EMI\s*\n?\s*AMOUNT\s*:\s*([^\n]+)/i) || [])[1];
+    const interest = (block.match(/RATE\s*OF\s*\n?\s*INTEREST\s*:\s*([^\n]+)/i) || [])[1];
+
+    const balanceRaw = cleanAmountJ(balance);
+    const balanceNum = balanceRaw === '' ? '' : (parseFloat(balanceRaw.replace(/,/g,'')) || 0);
+    const status = s.status || (s.closed ? 'Closed' : 'Active');
+
+    parsedAccounts.push({
+      idx: i + 1,
+      type: type ? clean(type) : '',
+      ownership: ownership ? clean(ownership) : '',
+      opened: s.opened,
+      closed: s.closed,
+      sanctioned: cleanAmountJ(sanctioned),
+      balance: balanceRaw, balanceNum,
+      emi: cleanAmountJ(emi),
+      limit: cleanAmountJ(creditLimit),
+      interest: cleanAmountJ(interest),
+      tenure: tenure ? clean(tenure) : '',
+      status
+    });
+  }
+
+  // Enquiries: "MEMBER NAME ENQUIRY DATE ENQUIRY PURPOSE ENQUIRY AMOUNT"
+  // header once, then plain LENDER / DATE / PURPOSE / ₹AMOUNT rows (all
+  // caps) — matched against the shared purpose taxonomy case-insensitively
+  // since this report's purposes are upper-cased.
+  const enqSectionMatch = text.match(/MEMBER NAME ENQUIRY DATE ENQUIRY PURPOSE ENQUIRY AMOUNT([\s\S]*?)(?:CONSUMER ENQUIRY DETAILS|CIR DATA GLOSSARY|$)/i);
+  if (enqSectionMatch){
+    const enqRegex = new RegExp(`([A-Z][A-Z0-9 .&\\-]*?)\\s+(\\d{2}\\/\\d{2}\\/\\d{4})\\s+(${enquiryPurposeAlt})\\s*(?:₹\\s*([\\d,]+))?`, 'gi');
+    let em;
+    while ((em = enqRegex.exec(enqSectionMatch[1])) !== null){
+      parsedEnquiries.push({ date: em[2], purpose: clean(em[1]) + ' — ' + clean(em[3]), amount: em[4] || '' });
+    }
+  }
+
+  reportMeta.totalAccounts = String(parsedAccounts.length);
+  reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
+
+  detectParsingArtifacts();
+}
+
 function parseFormatI(text){
   parsedAccounts = [];
   parsedEnquiries = [];
@@ -2858,6 +3416,75 @@ function parseFormatH(text){
 // parser for (Experian, Equifax, CRIF High Mark, or an unseen CIBIL layout).
 // This uses loose keyword matching rather than an exact template, so results
 // are approximate — the UI flags this clearly via reportMeta.genericFallback.
+// Field-label synonyms pooled from every format this project has actually
+// encountered (A-K) — different vendors/bureaus/export tools all expose
+// the same underlying concepts under different names. Order within each
+// list matters: more specific/distinctive synonyms first, since the first
+// one that matches wins.
+const FIELD_SYNONYMS_E = {
+  type: ["Account Type","Type of Account","Type of Loan","Nature of Facility","Facility Type","Loan Type"],
+  ownership: ["Ownership Indicator","Ownership Type","Ownership"],
+  opened: ["Date Opened / Disbursed","Date Opened/Disbursed","Date of Disbursement","Date Disbursed","Disbursed Date","Loan Start Date","Account Opened Date","Date Opened"],
+  closed: ["Date of Closure","Closed Date","Date Closed"],
+  sanctioned: ["Disbd Amt/High Credit","Disbursed Amount","Sanctioned Amount","Sanction Amount","Loan Amount","High Credit","Sanctioned"],
+  balance: ["Current Balance","Outstanding Balance","Outstanding Amount","O/s Balance","Balance"],
+  emi: ["InstlAmt/Freq","Installment Amount","EMI Amount","Monthly Installment","EMI"],
+  limit: ["Credit Limit","Cash Limit"],
+  interest: ["Interest Rate (%)","Rate of Interest","Interest Rate","ROI"],
+  tenure: ["Repayment Tenure","Loan Tenure","Tenure(month)","Tenure"],
+  status: ["Account Status","Status"],
+  overdue: ["Overdue Amount","Amount Overdue","Overdue Amt","Overdue"]
+};
+
+function wordPatternE(label){
+  // Tolerates a line break between each word of a multi-word label — the
+  // same "label wraps one word per line" quirk Format J/K needed, which
+  // any new vendor's layout could just as easily have.
+  return label.split(' ').map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*\\n?\\s*');
+}
+
+function buildFlexLabelRegexE(label){
+  // Tolerates the value sitting on the same line after a colon/dash, OR on
+  // its own following line with no colon at all (Format B's style) — both
+  // are common and a parser hard-coded to only one of them misses the
+  // other entirely.
+  return new RegExp(wordPatternE(label) + '\\s*[:\\-]?\\s*\\n?\\s*(?:₹|Rs\\.?)?\\s*([^\\n]{1,60})', 'i');
+}
+
+function findFirstMatchE(chunk, synonyms){
+  for (const syn of synonyms){
+    const m = chunk.match(buildFlexLabelRegexE(syn));
+    if (m && m[1]){
+      const val = clean(m[1]);
+      if (val) return val;
+    }
+  }
+  return '';
+}
+
+// Different formats naturally repeat different labels once per account —
+// most use something in the "type" family, but a report that never spells
+// out a loan/account type explicitly might instead repeat a lender-name
+// label consistently. Trying a couple of candidate anchor families and
+// keeping whichever actually repeats the most avoids hard-coding one
+// assumption about what a new, unseen format's structure looks like.
+function findBestAnchorsE(text){
+  const candidateAnchorGroups = [
+    FIELD_SYNONYMS_E.type,
+    ["Member Name","Credit Grantor","Lender Name"],
+  ];
+  let best = { anchors: [] };
+  for (const group of candidateAnchorGroups){
+    const altPattern = group.map(wordPatternE).join('|');
+    const re = new RegExp('(?:' + altPattern + ')\\s*[:\\-]?', 'gi');
+    const found = [];
+    let m;
+    while ((m = re.exec(text)) !== null) found.push(m.index);
+    if (found.length > best.anchors.length) best = { anchors: found };
+  }
+  return best.anchors;
+}
+
 function parseFormatE(text){
   parsedAccounts = [];
   parsedEnquiries = [];
@@ -2866,7 +3493,7 @@ function parseFormatE(text){
   const bureauMatch = text.match(/TransUnion\s*CIBIL|Experian|Equifax|CRIF\s*High\s*Mark|High\s*Mark|Goodscore|Oolka/i);
   reportMeta.bureau = bureauMatch ? bureauMatch[0] : 'Unrecognized bureau';
 
-  const nameMatch = text.match(/\b(?:Name\s*){1,8}[:\-]?\s*\n?\s*([A-Z][A-Za-z .\/]{2,45})/i);
+  const nameMatch = text.match(/\b(?:Applicant Name|Consumer Name|Customer Name|Name\s*){1,8}[:\-]?\s*\n?\s*([A-Z][A-Za-z .\/]{2,45})/i);
   consumerName = nameMatch ? stripTitle(clean(nameMatch[1])) : '';
 
   // Avoid the "- 900" range trap seen in Experian-family layouts (a score
@@ -2874,49 +3501,44 @@ function parseFormatE(text){
   // 900" can make a naive "digits near the word Score" match grab 300
   // instead of the real score) by rejecting a match immediately followed
   // by a dash and another number.
-  const scoreMatch = text.match(/Score\D{0,15}(\d{3})\b(?!\s*[-–]\s*\d)/i);
+  const scoreMatch = text.match(/(?:Credit\s*)?Score\D{0,15}(\d{3})\b(?!\s*[-–]\s*\d)/i);
   reportMeta.score = scoreMatch ? scoreMatch[1] : '';
 
-  const anchorRegex = /(Account Type|Type of Account|Type of Loan|Nature of Facility|Facility Type|Loan Type)\s*[:\-]?\s*/gi;
-  const anchors = [];
-  let am;
-  while ((am = anchorRegex.exec(text)) !== null) anchors.push(am.index);
+  const anchors = findBestAnchorsE(text);
 
   anchors.forEach((start, i) => {
-    const end = i + 1 < anchors.length ? anchors[i+1] : Math.min(text.length, start + 1000);
+    const end = i + 1 < anchors.length ? anchors[i+1] : Math.min(text.length, start + 1500);
     const chunk = text.substring(start, end);
 
-    const typeMatch = chunk.match(/(?:Account Type|Type of Account|Type of Loan|Nature of Facility|Facility Type|Loan Type)\s*[:\-]?\s*([A-Za-z][A-Za-z \-]{2,40})/i);
-    const type = typeMatch ? clean(typeMatch[1]) : '';
+    const type = findFirstMatchE(chunk, FIELD_SYNONYMS_E.type);
     if (!type) return;
 
-    const balMatch = chunk.match(/(?:Current Balance|Outstanding Balance|Outstanding Amount|Balance)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-    const sancMatch = chunk.match(/(?:Sanctioned Amount|Sanctioned|High Credit|Credit Limit|Loan Amount|Disbursed Amount)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-    const emiMatch = chunk.match(/(?:EMI Amount|EMI|Installment Amount)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-    const overdueMatch = chunk.match(/(?:Amount Overdue|Overdue Amount|Overdue)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-    const openedMatch = chunk.match(/(?:Date Opened|Opened|Date Disbursed|Disbursed Date)\D{0,10}(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
-    const closedMatch = chunk.match(/(?:Date Closed|Closed)\D{0,10}(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
-    const ownershipMatch = chunk.match(/Ownership\s*[:\-]?\s*(Individual|Joint|Guarantor|Authorized User)/i);
+    const ownership = findFirstMatchE(chunk, FIELD_SYNONYMS_E.ownership);
+    const opened = findFirstMatchE(chunk, FIELD_SYNONYMS_E.opened);
+    const closed = findFirstMatchE(chunk, FIELD_SYNONYMS_E.closed);
+    const sanctioned = findFirstMatchE(chunk, FIELD_SYNONYMS_E.sanctioned);
+    const balanceRaw = findFirstMatchE(chunk, FIELD_SYNONYMS_E.balance);
+    const emi = findFirstMatchE(chunk, FIELD_SYNONYMS_E.emi);
+    const limit = findFirstMatchE(chunk, FIELD_SYNONYMS_E.limit);
+    const interest = findFirstMatchE(chunk, FIELD_SYNONYMS_E.interest);
+    const tenure = findFirstMatchE(chunk, FIELD_SYNONYMS_E.tenure);
+    const overdue = findFirstMatchE(chunk, FIELD_SYNONYMS_E.overdue);
 
-    const balanceRaw = balMatch ? balMatch[1] : '';
     const balanceNum = balanceRaw ? (parseFloat(balanceRaw.replace(/,/g,'')) || 0) : '';
-    const closedVal = closedMatch ? closedMatch[1] : '';
-    const overdue = overdueMatch ? overdueMatch[1] : '';
-
-    let status = closedVal ? 'Closed' : 'Active';
+    let status = closed ? 'Closed' : 'Active';
     if (overdue && parseFloat(overdue.replace(/,/g,'')) > 0) status = 'Active — OVERDUE ₹' + overdue;
 
     parsedAccounts.push({
-      idx: parsedAccounts.length + 1,
-      type, ownership: ownershipMatch ? ownershipMatch[1] : '',
-      opened: openedMatch ? openedMatch[1] : '', closed: closedVal,
-      sanctioned: sancMatch ? sancMatch[1] : '', balance: balanceRaw, balanceNum,
-      emi: emiMatch ? emiMatch[1] : '', limit: '', interest: '', tenure: '', status
+      idx: parsedAccounts.length + 1, type, ownership,
+      opened, closed, sanctioned, balance: balanceRaw, balanceNum,
+      emi, limit, interest, tenure, status
     });
   });
 
   reportMeta.totalAccounts = String(parsedAccounts.length);
   reportMeta.zeroBalance = String(parsedAccounts.filter(a => a.balanceNum === 0).length);
+
+  detectParsingArtifacts();
 }
 
 // ============ Risk & Score Dashboard ============
@@ -3378,6 +4000,23 @@ function renderResults(){
   if (reportMeta.summaryOnly){
     summaryOnlyNote.style.display = 'block';
     summaryOnlyNote.innerHTML = `ℹ️ <b>This is a Summary-style CIBIL report</b> (from myscore.cibil.com's CreditView dashboard) — it only contains aggregate counts and totals, not itemized per-account or per-enquiry details, so there's no loan table to show below. The numbers above (accounts, active loans, outstanding, enquiries) are read directly from those totals.`;
+  }
+
+  // Self-check result: some field(s) came back containing recognizable
+  // print/export junk or a shape that field can't legitimately have. This
+  // is deliberately shown as a visible warning rather than silently
+  // fixing/hiding it — the exact field + row is what makes a future
+  // unknown export variant fixable from a bug report alone, without
+  // necessarily needing the original file re-sent.
+  if (reportMeta.hasParsingArtifacts){
+    artifactWarning.style.display = 'block';
+    const examples = reportMeta.parsingArtifacts.slice(0, 4).map(f =>
+      `<li>${f.accountIdx ? `Row ${f.accountIdx}, <b>${f.field}</b>` : `<b>${f.field}</b>`}: "${escapeHtml(f.value.slice(0, 60))}${f.value.length > 60 ? '…' : ''}" <span style="color:#9CA3AF;">(${f.reason})</span></li>`
+    ).join('');
+    const more = reportMeta.parsingArtifacts.length > 4 ? `<div style="margin-top:4px;color:#9CA3AF;">+ ${reportMeta.parsingArtifacts.length - 4} more field(s)</div>` : '';
+    artifactWarning.innerHTML = `⚠️ <b>Some fields below may not be fully clean</b> — ScoreDesk spotted leftover print/export text (or an unexpected value) in ${reportMeta.parsingArtifacts.length} field${reportMeta.parsingArtifacts.length === 1 ? '' : 's'}, most likely from how your PDF viewer/browser exported this report. Please double-check these before relying on them:<ul style="margin:6px 0 0 18px;padding:0;">${examples}</ul>${more}`;
+  } else {
+    artifactWarning.style.display = 'none';
   }
 
   renderRiskDashboard();
