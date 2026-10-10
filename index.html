@@ -193,6 +193,8 @@
   .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-top:14px;}
   .stat{background:#F7FBFC;border:1px solid var(--line);padding:16px;border-radius:var(--radius-sm);}
   .stat .num{font-size:23px;font-weight:800;color:var(--navy-2);}
+  /* long full names: smaller type + wrapping so the WHOLE name shows instead of just the first word */
+  .stat .num.num-name{font-size:15px;line-height:1.25;overflow-wrap:anywhere;}
   .stat .lbl{font-family:'Courier New',monospace;font-size:11px;color:#7A8899;margin-top:4px;text-transform:uppercase;}
 
   /* ---------- Risk & Score Dashboard ---------- */
@@ -477,10 +479,10 @@
     <div class="card">
       <div class="hero-head">
         <h2>Upload Your CIBIL Report</h2>
-        <div class="hero-sub">Secure · PDF or Saved HTML Page · Takes About 30 Seconds</div>
+        <div class="hero-sub">Secure · PDF, Saved HTML Page or Screenshot · Takes About 30 Seconds</div>
         <div class="trust-row">
           <span>🔒 <b>Processed locally</b> — never uploaded</span>
-          <span>✓ <b>PDF or HTML</b></span>
+          <span>✓ <b>PDF, HTML or image</b></span>
           <span>✓ <b>No data stored</b></span>
           <span>✓ <b>Free score analysis</b></span>
         </div>
@@ -490,7 +492,7 @@
         <div class="big">Click to choose a file, or drag it here</div>
         <div class="small">PDF (any layout, scanned or text) or a saved HTML report page · Other bureaus read on a best-effort basis</div>
       </div>
-      <input type="file" id="fileInput" accept="application/pdf,text/html,.html,.htm">
+      <input type="file" id="fileInput" accept="application/pdf,text/html,.html,.htm,image/png,image/jpeg,image/webp">
       <div class="status-line" id="statusLine"><span class="dot" id="statusDot"></span><span id="statusText">Waiting for a file…</span></div>
       <div class="progress-track" id="progressTrack" style="display:none;">
         <div class="progress-fill" id="progressFill"></div>
@@ -525,7 +527,7 @@
       <div id="riskDashboard" class="risk-dashboard" style="display:none;"></div>
       <div id="emptyHint" class="empty-hint" style="display:none;">Some fields couldn't be auto-detected — this can happen if the PDF was scanned as an image rather than text. Check the preview table below and correct anything odd directly in the downloaded Excel file.</div>
       <div id="genericWarning" class="password-box" style="display:none; background:#FFF8EC; border-color:#EAD9AE;">
-        ⚠️ <b>This report's layout wasn't fully recognized</b> — it may be from a bureau other than TransUnion CIBIL, or a format we haven't calibrated yet. The numbers below are a best-effort extraction: please double-check them carefully against the original PDF before relying on them.
+        <span id="genericWarningLead">⚠️ <b>This report's layout wasn't fully recognized</b> — it may be from a bureau other than TransUnion CIBIL, or a format we haven't calibrated yet. The numbers below are a best-effort extraction: please double-check them carefully against the original PDF before relying on them.</span>
         <div style="margin-top:10px;">See <b>"Which report formats are supported?"</b> in the FAQ below for the current list, or send this one to our developer so full support can be added:</div>
         <button type="button" id="genericWarningWaBtn" class="primary cta-block" style="margin-top:10px;">📲 Share this report on WhatsApp</button>
         <div class="form-note" style="margin-top:6px;">This opens a WhatsApp chat to <b>+91 96193 98808</b> with a message pre-filled — please <b>attach the PDF yourself</b> in the chat before sending (a web page can't attach or send files on its own), and we'll get back to you shortly once we've added support for it.</div>
@@ -534,6 +536,7 @@
         ℹ️ <b>CIBIL Score not shown above</b> — in this report layout, the score is a drawn dial/gauge picture, not text, so it can't be read reliably from the file (a picture of a "6" and "9" digit can easily be misread as an "8"). Please check the number on <b>page 1 of the PDF</b> directly. Everything else (accounts, EMIs, balances, enquiries) is read from real text and is not affected.
       </div>
       <div id="artifactWarning" class="password-box" style="display:none; background:#FFF1F0; border-color:#F3B4AE;"></div>
+      <div id="imageOcrNote" class="password-box" style="display:none; background:#EEF6FF; border-color:#BFDBFE;"></div>
       <div id="summaryOnlyNote" class="password-box" style="display:none; background:#EEF6FF; border-color:#BFDBFE;"></div>
       <div id="reviewSummary" class="review-summary" style="display:none;"></div>
       <div class="acct-search-row">
@@ -696,7 +699,7 @@
     <button type="button" id="openPrivacyModal">Privacy Policy</button>
     <button type="button" id="openTermsModal">Terms</button>
     <a href="https://wa.me/919619398808" target="_blank" rel="noopener" style="font-family:'Courier New',monospace;font-size:11px;color:var(--teal-2);text-decoration:underline;">Contact</a>
-    <span class="footer-version">v2.1</span>
+    <span class="footer-version">v3.2 · formats A–K · image OCR · confidence checks</span>
   </div>
   RUNS FULLY IN YOUR BROWSER · NO ACCOUNT NEEDED · CONTENT ON THIS PAGE IS PROTECTED — RIGHT-CLICK AND SOURCE VIEWING ARE DISABLED AS A DETERRENT, THOUGH NO WEB PAGE CAN BE FULLY COPY-PROOF.
 </footer>
@@ -862,7 +865,11 @@ function openWhatsApp(text){
 
 document.getElementById('genericWarningWaBtn').addEventListener('click', () => {
   const fileNote = lastFileName ? `\nFile: ${lastFileName}` : '';
-  const text = `Hi, ScoreDesk didn't recognize my report's format.${fileNote}\n\nI'm attaching the PDF here — could you take a look and add support for it?`;
+  const dg = reportMeta.diagnostics || {};
+  const diagNote = dg.formatId !== undefined
+    ? `\nDiagnostics: parser=${dg.formatId || 'none'}, source=${dg.sourceType}, accounts=${dg.accounts}, name=${dg.hasName ? 'yes' : 'no'}, score=${dg.hasScore ? 'yes' : 'no'}, confidence=${dg.confidence}`
+    : '';
+  const text = `Hi, ScoreDesk didn't recognize my report's format.${fileNote}${diagNote}\n\nI'm attaching the file here — could you take a look and add support for it?`;
   openWhatsApp(text);
 });
 
@@ -1002,6 +1009,7 @@ const genericWarning = document.getElementById('genericWarning');
 const scoreImageNote = document.getElementById('scoreImageNote');
 const summaryOnlyNote = document.getElementById('summaryOnlyNote');
 const artifactWarning = document.getElementById('artifactWarning');
+const imageOcrNote = document.getElementById('imageOcrNote');
 const reviewSummary = document.getElementById('reviewSummary');
 const passwordBox = document.getElementById('passwordBox');
 const pdfPasswordInput = document.getElementById('pdfPasswordInput');
@@ -1229,6 +1237,98 @@ async function getOcrWorker(){
 // Renders a PDF page to an offscreen canvas so Tesseract can OCR it —
 // used only when the page has little or no extractable text layer,
 // i.e. it's a scanned image rather than a native-text PDF page.
+// ---- Image input (screenshots / photos of a report) ----------------------
+// Strategies borrowed from light-ocr's design: (1) accept plain images, not
+// only PDFs; (2) honour EXIF orientation (phone photos are often stored
+// rotated — createImageBitmap's 'from-image' mode applies it); (3) for large
+// inputs work region by region rather than one giant pass ("detect, then
+// recognize"): a long scrolling phone screenshot is far taller than OCR
+// engines handle well in one go, so it is cut into overlapping horizontal
+// bands, each read separately; (4) keep the engine's confidence score and
+// surface it, instead of presenting OCR text as if it were certain.
+
+// Pure: where to cut a width x height image. Bands overlap slightly so a line
+// that straddles a cut is read whole in at least one band.
+function planOcrBands(width, height){
+  const bandH = Math.max(800, Math.min(2200, Math.round(width * 1.5)));
+  const overlap = 80;
+  if (height <= bandH * 1.15) return [{ y: 0, h: height }];
+  const bands = [];
+  let y = 0;
+  while (y < height){
+    let h = Math.min(bandH, height - y);
+    // Never leave a tiny trailing sliver (usually blank margin, which OCRs
+    // as nothing and would skew confidence): absorb it into this band.
+    if (height - (y + h) < bandH * 0.25) h = height - y;
+    bands.push({ y, h });
+    if (y + h >= height) break;
+    y += bandH - overlap;
+  }
+  return bands;
+}
+
+// Pure: join per-band OCR text, dropping lines the overlap read twice.
+function mergeBandTexts(texts){
+  const norm = s => s.replace(/\s+/g, ' ').trim().toLowerCase();
+  let out = [];
+  texts.forEach((t, i) => {
+    let lines = String(t || '').split('\n');
+    if (i > 0){
+      const tail = out.filter(l => norm(l)).slice(-5).map(norm);
+      while (lines.length && (!norm(lines[0]) || tail.includes(norm(lines[0])))) lines.shift();
+    }
+    out = out.concat(lines);
+  });
+  return out.join('\n');
+}
+
+async function loadImageForOcr(file){
+  if (window.createImageBitmap){
+    try{ return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+    catch(e){ /* fall through to <img> */ }
+  }
+  return await new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image load failed')); };
+    img.src = url;
+  });
+}
+
+async function ocrImageFile(file, onProgress){
+  const src = await loadImageForOcr(file);
+  const w = src.naturalWidth || src.width;
+  const h = src.naturalHeight || src.height;
+  // Small screenshots OCR much better when enlarged; big ones are left alone.
+  const scale = w < 1200 ? Math.min(2.5, 1400 / w) : 1;
+  const worker = await getOcrWorker();
+  const bands = planOcrBands(w, h);
+  const texts = [], confs = [];
+  for (let i = 0; i < bands.length; i++){
+    const b = bands[i];
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(b.h * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(src, 0, b.y, w, b.h, 0, 0, canvas.width, canvas.height);
+    const { data } = await worker.recognize(canvas);
+    texts.push(data.text || '');
+    // Only bands that actually contained text count toward confidence — a
+    // blank band reports 0 and would make a clean read look unreliable.
+    if (typeof data.confidence === 'number' && (data.text || '').trim().length >= 20) confs.push(data.confidence);
+    onProgress && onProgress((i + 1) / bands.length);
+  }
+  if (src.close) src.close();
+  return {
+    text: mergeBandTexts(texts),
+    confidence: confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : null,
+    bands: bands.length
+  };
+}
+
 async function ocrPage(page){
   const viewport = page.getViewport({ scale: 2.2 });
   const canvas = document.createElement('canvas');
@@ -1460,8 +1560,8 @@ async function extractScoreViaOCR(page, onStatus){
 // position, never from pdf.js's own item.hasEOL flag. Browser "Print to
 // PDF" exports (common for consumer self-serve reports, e.g. CIBIL's
 // myscore.cibil.com CreditView pages) mark hasEOL on text runs that sit
-// mid-line — e.g. splitting "MS RAKHEE SHROFF" into an EOL-flagged "MS"
-// followed by "RAKHEE SHROFF" on the very same visual row, which silently
+// mid-line — e.g. splitting "MS JANE DOE" into an EOL-flagged "MS"
+// followed by "JANE DOE" on the very same visual row, which silently
 // truncated names to a single word/prefix. Real Y-position is reliable
 // regardless of how the source PDF was generated; hasEOL is not.
 // Turns a saved HTML report page's DOM into the same kind of positional
@@ -1543,8 +1643,9 @@ let currentRequestId = 0;
 async function handleFile(file){
   const isHtml = file.type === 'text/html' || /\.html?$/i.test(file.name);
   const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-  if (!isHtml && !isPdf){
-    setStatus('Please choose a .pdf or .html file.', 'err');
+  const isImage = /^image\/(png|jpe?g|webp)$/i.test(file.type) || /\.(png|jpe?g|webp)$/i.test(file.name);
+  if (!isHtml && !isPdf && !isImage){
+    setStatus('Please choose a PDF, a saved .html page, or a PNG/JPG screenshot.', 'err');
     return;
   }
   // Tag this run. If a newer file is selected before this one finishes,
@@ -1553,7 +1654,11 @@ async function handleFile(file){
   const scanStartTime = performance.now();
   lastFileName = file.name;
 
-  setStatus(isHtml ? 'Reading HTML…' : 'Reading PDF…');
+  // Set BEFORE parsing — buildDiagnostics() reads these — and reset every
+  // run so a previous upload's source type / OCR confidence can't leak in.
+  reportMeta.sourceType = isHtml ? 'html' : (isImage ? 'image' : 'pdf');
+  reportMeta.ocrConfidence = null;
+  setStatus(isHtml ? 'Reading HTML…' : (isImage ? 'Reading image with on-device OCR…' : 'Reading PDF…'));
   resultsCard.style.display = 'none';
   readyBanner.style.display = 'none';
   loanTableBody.innerHTML = '';
@@ -1573,6 +1678,36 @@ async function handleFile(file){
     // rejoins the exact same parseReport()/renderResults() pipeline the
     // PDF path uses, so every format parser works unmodified — only the
     // text-extraction step differs.
+    // Image path (screenshot/photo): on-device OCR, band by band, then the
+    // SAME parseReport pipeline everything else uses. Nothing is uploaded.
+    if (isImage){
+      updateProgress(0.1);
+      const ocr = await ocrImageFile(file, frac => {
+        updateProgress(0.1 + frac * 0.75);
+        setStatus(`Reading image with on-device OCR… ${Math.round(frac * 100)}%`);
+      });
+      if (requestId !== currentRequestId) return;
+      reportMeta.ocrConfidence = ocr.confidence;
+      setStatus('Parsing loan accounts…');
+      updateProgress(0.9);
+      parseReport(ocr.text);
+      if (requestId !== currentRequestId) return;
+      // A score read by OCR from an image is only as good as OCR on those
+      // digits, so it is shown (if found) but the page-level note below
+      // tells the user to verify. No separate gauge-OCR fallback here.
+      reportMeta.scoreSource = reportMeta.score ? 'ocr-image' : 'unavailable';
+      if (reportMeta.score){ showLiveMeter('text', null, reportMeta.score); }
+      else { showLiveMeter('unavailable', null); }
+      updateProgress(0.97);
+      lastScanDurationMs = performance.now() - scanStartTime;
+      renderResults();
+      setStatus(`Done — found ${parsedAccounts.length} accounts and ${parsedEnquiries.length} enquiries (read from image, ${ocr.bands} section${ocr.bands === 1 ? '' : 's'}).`, 'ok');
+      readyBanner.style.display = 'block';
+      stopProgress(true);
+      if (riskDashboard.style.display === 'block'){ setTimeout(hideLiveMeter, 1400); }
+      return;
+    }
+
     if (isHtml){
       updateProgress(0.2);
       const rawHtml = await file.text();
@@ -1584,7 +1719,6 @@ async function handleFile(file){
       parseReport(fullText);
       if (requestId !== currentRequestId) return;
 
-      reportMeta.sourceType = 'html';
       // No drawn-gauge OCR fallback here — a saved webpage's score is
       // either real DOM text (already captured above) or, on the rare
       // report that draws it as an image/canvas, genuinely unreadable
@@ -1726,7 +1860,9 @@ async function handleFile(file){
     setStatus(
       isHtml
         ? 'Could not read this HTML file.'
-        : 'Could not read this PDF. It may be a scanned image rather than a text PDF.',
+        : (isImage
+          ? 'Could not read this image. Try a clearer or larger screenshot, or upload the PDF instead.'
+          : 'Could not read this PDF. It may be a scanned image rather than a text PDF.'),
       'err'
     );
     stopProgress(false);
@@ -1941,7 +2077,77 @@ function parseFlexDate(str){
   return null;
 }
 
+
+// Public entry point. Wraps the parsing engine so EVERY input path (PDF,
+// saved HTML, image OCR) and every format — including the ones that return
+// early — ends with the same structured diagnostics block. Borrowed idea:
+// light-ocr wraps every result in a versioned envelope with per-line
+// confidence rather than returning bare text, so callers can decide how
+// far to trust it. ScoreDesk previously had no notion of "how well did we
+// read this", which is why a recognized-but-mostly-blank result showed no
+// warning at all.
 function parseReport(text){
+  reportMeta.formatId = '';
+  reportMeta.ocrConfidence = reportMeta.ocrConfidence || null;
+  parseReportCore(text);
+  // Fallback: some layouts (and OCR'd screenshots that cropped the Name
+  // field) only show the holder's name in the "Hello, NAME" greeting.
+  // Only used when nothing else found a name. The repeated-text collapse
+  // is applied first so a glued/duplicated greeting can't leak garbage in.
+  if (!consumerName){
+    const flat = text.replace(/([A-Za-z][A-Za-z0-9 ,&().\/\-]{3,80}?)\1{1,9}/g, '$1');
+    const hm = flat.match(/\bHello,\s+([A-Z][A-Z .]{2,50}?)\s*(?:\n|$)/);
+    if (hm) consumerName = stripTitle(clean(hm[1]));
+  }
+  buildDiagnostics();
+}
+
+function fillRate(list, field){
+  if (!list.length) return null;
+  return list.filter(a => a[field] !== undefined && a[field] !== null && String(a[field]).trim() !== '').length / list.length;
+}
+
+function buildDiagnostics(){
+  const accs = parsedAccounts;
+  const fill = {
+    type: fillRate(accs, 'type'),
+    ownership: fillRate(accs, 'ownership'),
+    opened: fillRate(accs, 'opened'),
+    balance: fillRate(accs, 'balance'),
+  };
+  const artifactCount = (reportMeta.parsingArtifacts || []).length;
+  let confidence;
+  if (reportMeta.summaryOnly){
+    confidence = 'summary';
+  } else if (accs.length === 0){
+    confidence = 'none';
+  } else if (fill.type < 0.7 || fill.opened < 0.5){
+    // Account type and opened date are populated for virtually every real
+    // account in every format seen so far, so a result where many are
+    // missing means the parser matched the document's shape but not its
+    // labels — exactly the "looks recognized, columns empty" failure.
+    confidence = 'low';
+  } else if (artifactCount > 0 || (reportMeta.ocrConfidence !== null && reportMeta.ocrConfidence < 75)){
+    confidence = 'review';
+  } else {
+    confidence = 'good';
+  }
+  reportMeta.diagnostics = {
+    schemaVersion: 1,
+    formatId: reportMeta.formatId || '',
+    sourceType: reportMeta.sourceType || 'pdf',
+    accounts: accs.length,
+    enquiries: parsedEnquiries.length,
+    hasName: !!consumerName,
+    hasScore: !!reportMeta.score,
+    fillRates: fill,
+    artifactCount,
+    ocrConfidence: reportMeta.ocrConfidence,
+    confidence
+  };
+}
+
+function parseReportCore(text){
   // Some myscore.cibil.com print exports render certain headings/labels
   // (page title, the greeting name, section labels like "Name"/"Date Of
   // Birth", account labels like "Account Type"/"Date Closed") using a CSS
@@ -2212,6 +2418,7 @@ function detectParsingArtifacts(){
 }
 
 function parseFormatA(text){
+  reportMeta.formatId = 'A';
   parsedAccounts = [];
   parsedEnquiries = [];
 
@@ -2326,6 +2533,18 @@ const NUMERIC_B = new Set([
 const labelAltB = [...LABELS_B].sort((a,b) => b.length - a.length).map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
 const fieldRegexB = new RegExp(`(${labelAltB})\\s*([\\s\\S]*?)(?=(?:${labelAltB})|PAYMENT STATUS|Payment Status|ACCOUNT DETAILS|Account Details|$)`, 'gi');
 
+// Fields whose value is, by definition, a single date. At a page break some
+// exports scramble reading order so that OTHER lines (a lender name, "Account
+// Type", payment-history rows...) land right after the date; because a field's
+// value runs "until the next label", that stray text got glued onto the date
+// (e.g. "30/06/2018 HDFC BANK ... LICENCE CANCELLED" in Date Closed). A date
+// field can only legitimately hold a date, so anything after it is discarded.
+const DATE_FIELDS_B = new Set([
+  "Date Opened / Disbursed","Date Closed","Date of Last Payment",
+  "Date Reported And Certified","Payment Start Date","Payment End Date","Date Of Enquiry"
+]);
+const LEADING_DATE_RE = /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/;
+
 function extractFieldsB(block){
   const out = {};
   let m;
@@ -2334,6 +2553,10 @@ function extractFieldsB(block){
     const key = m[1].trim();
     let val = clean(m[2]);
     if (/^-+$/.test(val)) val = ''; // handles both '-' and '--' placeholders
+    if (DATE_FIELDS_B.has(key) && val){
+      const dm = val.match(LEADING_DATE_RE);
+      if (dm) val = dm[0];
+    }
     if (NUMERIC_B.has(key) && val){
       const numMatch = val.replace('₹','').trim().match(/^-?[\d,]+(\.\d+)?/);
       val = numMatch ? numMatch[0] : val;
@@ -2398,6 +2621,7 @@ function splitEmbeddedAccountsB(block){
 }
 
 function parseFormatB(text){
+  reportMeta.formatId = 'B';
   parsedAccounts = [];
   parsedEnquiries = [];
 
@@ -2406,7 +2630,7 @@ function parseFormatB(text){
   if (!consumerName){
     // Some exports print "Name / DOB / Gender" as a row of labels first,
     // then the three matching values below as a second row (a table read
-    // column-header-first, values-second) — e.g. "Name\nDOB\nGender\nSHAISTA
+    // column-header-first, values-second) — e.g. "Name\nDOB\nGender\nJANE
     // ...\n05/05/1986\nFemale". The pattern above expects the value right
     // after its own label and misses this layout entirely.
     const colMatch = text.match(/\bName\s*\n+\s*(?:DOB|Date Of Birth)\s*\n+\s*Gender\s*\n+\s*([A-Z][A-Za-z .\/]+?)\s*\n+\s*\d{2}\/\d{2}\/\d{4}\s*\n+\s*(?:Male|Female|Other)\b/i);
@@ -2576,6 +2800,7 @@ function extractFieldsC(block){
 }
 
 function parseFormatC(text){
+  reportMeta.formatId = 'C';
   parsedAccounts = [];
   parsedEnquiries = [];
 
@@ -2680,6 +2905,7 @@ function extractFieldsD(block){
 const acctHeaderRegexD2 = /\n([A-Z][A-Z\/\- ]{2,30}?)\s+([A-Za-z][A-Za-z0-9&.,'\-\/ ]{2,60}?)\s+(?:[✓✔]\s+)?Acct\s+(\d+)\n/g;
 
 function parseFormatD(text){
+  reportMeta.formatId = 'D';
   parsedAccounts = [];
   parsedEnquiries = [];
 
@@ -2798,13 +3024,14 @@ function parseFormatD(text){
 const headerRegexF = /([A-Z][A-Z0-9&.\-]+(?:\s+[A-Z0-9&.\-]+)*)\s*\n\s*Account Type\s*\n\s*([A-Za-z][A-Za-z \-]*?)\s*\n\s*Account Number\s*\n\s*([A-Za-z0-9\-\u2010-\u2015]+(?:\s*\n\s*[A-Za-z0-9]+)?)\s*\n\s*(?:\d+\s*\n\s*)?Ownership\s*\n\s*(Individual|Joint|Guarantor|Authorized User)/g;
 
 function parseFormatF(text){
+  reportMeta.formatId = 'F';
   parsedAccounts = [];
   parsedEnquiries = [];
 
   const nameMatch = text.match(/\bName\s*\n\s*DOB\s*\n\s*Gender\s*\n\s*([\s\S]+?)\n\s*\d{2}\/\d{2}\/\d{4}/);
   if (nameMatch){
     // Some exports render the name twice, the second copy truncated (a
-    // leftover hover/tooltip artifact) — e.g. "NILESH TIWARI NILESH TIWA".
+    // leftover hover/tooltip artifact) — e.g. "JOHN DOE JOHN DO".
     // Cut at the first repeated word instead of keeping the garbled tail.
     const words = clean(nameMatch[1]).split(' ');
     const dupeAt = words.findIndex((w, i) => i > 0 && w === words[0]);
@@ -2936,6 +3163,7 @@ function extractFieldsG(block){
 }
 
 function parseFormatG(text){
+  reportMeta.formatId = 'G';
   parsedAccounts = [];
   parsedEnquiries = [];
 
@@ -3110,6 +3338,7 @@ function cleanAmountK(v){
 }
 
 function parseFormatK(text){
+  reportMeta.formatId = 'K';
   parsedAccounts = [];
   parsedEnquiries = [];
 
@@ -3204,6 +3433,7 @@ function cleanAmountJ(v){
 }
 
 function parseFormatJ(text){
+  reportMeta.formatId = 'J';
   parsedAccounts = [];
   parsedEnquiries = [];
 
@@ -3285,6 +3515,7 @@ function parseFormatJ(text){
 }
 
 function parseFormatI(text){
+  reportMeta.formatId = 'I';
   parsedAccounts = [];
   parsedEnquiries = [];
 
@@ -3368,6 +3599,7 @@ function parseFormatI(text){
 // couldn't be matched), so the caller knows not to fall through to the
 // generic scanner and clobber what was found here.
 function parseFormatH(text){
+  reportMeta.formatId = 'H';
   parsedAccounts = [];
   parsedEnquiries = [];
 
@@ -3486,6 +3718,7 @@ function findBestAnchorsE(text){
 }
 
 function parseFormatE(text){
+  reportMeta.formatId = 'E-generic';
   parsedAccounts = [];
   parsedEnquiries = [];
   reportMeta.genericFallback = true;
@@ -3973,7 +4206,28 @@ function renderScanSummary(){
 function renderResults(){
   resultsCard.style.display = 'block';
   emptyHint.style.display = (parsedAccounts.length || reportMeta.summaryOnly) ? 'none' : 'block';
-  genericWarning.style.display = reportMeta.genericFallback ? 'block' : 'none';
+  // Show the "please send us this report" prompt not only when the generic
+  // fallback ran, but also whenever the diagnostics say a recognized
+  // format came back mostly blank ("low") or empty ("none") — the case
+  // that previously failed silently, with empty columns and no warning.
+  if (reportMeta.sourceType === 'image'){
+    const oc = reportMeta.ocrConfidence;
+    imageOcrNote.style.display = 'block';
+    imageOcrNote.innerHTML = `📷 <b>Read from an image using on-device OCR</b>${oc !== null && oc !== undefined ? ` (average confidence ~${Math.round(oc)}%)` : ''} — nothing was uploaded. OCR can misread digits (a 0 as an 8, a 1 as a 7), so please check the amounts and dates against your image. A PDF download of the same report reads far more reliably.`;
+  } else {
+    imageOcrNote.style.display = 'none';
+  }
+  const dg = reportMeta.diagnostics || {};
+  const readPoorly = dg.confidence === 'low' || dg.confidence === 'none';
+  genericWarning.style.display = (reportMeta.genericFallback || readPoorly) ? 'block' : 'none';
+  const lead = document.getElementById('genericWarningLead');
+  if (lead && !reportMeta.genericFallback && readPoorly){
+    lead.innerHTML = dg.confidence === 'none'
+      ? "⚠️ <b>We couldn't read any accounts from this file</b> — the layout may be one we haven't calibrated yet, or the file may be an image/scan that didn't read cleanly."
+      : "⚠️ <b>Some columns in this report could not be read</b> — we recognized the layout but many fields (like account type or opened date) came back empty. Please check the original before relying on these numbers.";
+  } else if (lead && reportMeta.genericFallback){
+    lead.innerHTML = "⚠️ <b>This report's layout wasn't fully recognized</b> — it may be from a bureau other than TransUnion CIBIL, or a format we haven't calibrated yet. The numbers below are a best-effort extraction: please double-check them carefully against the original PDF before relying on them.";
+  }
   summaryOnlyNote.style.display = 'none';
 
   // Score note now has three states: hidden (read from real text), an OCR
@@ -4039,7 +4293,7 @@ function renderResults(){
   const scoreLbl = reportMeta.scoreSource === 'ocr' ? 'CIBIL Score (from image) *' : 'CIBIL Score';
 
   statGrid.innerHTML = `
-    <div class="stat"><div class="num">${consumerName ? consumerName.split(' ')[0] : '—'}</div><div class="lbl">Consumer</div></div>
+    <div class="stat"><div class="num${consumerName && consumerName.length > 12 ? ' num-name' : ''}">${consumerName ? escapeHtml(consumerName) : '—'}</div><div class="lbl">Consumer</div></div>
     <div class="stat"><div class="num">${scoreDisplay}</div><div class="lbl">${scoreLbl}</div></div>
     <div class="stat"><div class="num">${accountsFoundDisplay}</div><div class="lbl">Accounts Found</div></div>
     <div class="stat"><div class="num">${activeLoansDisplay}</div><div class="lbl">Active Loans</div></div>
